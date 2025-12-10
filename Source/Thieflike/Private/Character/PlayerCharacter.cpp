@@ -9,38 +9,31 @@ APlayerCharacter::APlayerCharacter()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	// Player height
+	GetCapsuleComponent()->InitCapsuleSize(42.0f, 88.0);
+
 	// Create a first person camera component
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	check(FirstPersonCameraComponent != nullptr);
-
-	// Create a first person mesh component for the owning player
-	FirstPersonMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
-	check(FirstPersonMeshComponent != nullptr);
-
-	// Attach the first person mesh to the skeletal mesh
-	FirstPersonMeshComponent->SetupAttachment(GetMesh());
-
-	// The first-person mesh is included in First Person rendering (use FirstPersonFieldofView and FirstPersonScale on this mesh) 
-	FirstPersonMeshComponent->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
-
-	// Only the owning player sees the first-person mesh
-	FirstPersonMeshComponent->SetOnlyOwnerSee(true);
-
-	// The owning player doesn't see the regular (third-person) body mesh, but it casts a shadow
-	GetMesh()->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
-
-	// Set the first person mesh to not collide with other objects
-	FirstPersonMeshComponent->SetCollisionProfileName(FName("NoCollision"));
-
-	// Position the camera slightly above the eyes and rotate it to behind the player's head
-	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FirstPersonCameraOffset, FRotator(0.0f, 90.0f, -90.0f));
+	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
-	// Enable first-person rendering on the camera and set default FOV and scale values
+	// Position the camera slightly above the eyes
+	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	// Set camera properties
+	FirstPersonCameraComponent->FieldOfView = 90.0f;
 	FirstPersonCameraComponent->bEnableFirstPersonFieldOfView = true;
 	FirstPersonCameraComponent->bEnableFirstPersonScale = true;
-	FirstPersonCameraComponent->FirstPersonFieldOfView = FirstPersonFieldOfView;
-	FirstPersonCameraComponent->FirstPersonScale = FirstPersonViewScale;
+	FirstPersonCameraComponent->FirstPersonFieldOfView = 90.0f;
+	FirstPersonCameraComponent->FirstPersonScale = 0.60f;
+
+	// Create a first person mesh component for the player character
+	FirstPersonMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
+	check(FirstPersonMeshComponent != nullptr);
+	FirstPersonMeshComponent->SetOnlyOwnerSee(true);
+	FirstPersonMeshComponent->SetupAttachment(FirstPersonCameraComponent);
+	FirstPersonMeshComponent->bCastDynamicShadow = false;
+	FirstPersonMeshComponent->CastShadow = false;
 }
 
 // Called when the game starts or when spawned
@@ -69,6 +62,30 @@ void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Smooth Lean Interpolation
+	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
+
+	// Apply Roll (lean tilt)
+	FRotator CamRot = FirstPersonCameraComponent->GetRelativeRotation();
+	CamRot.Roll = CurrentLean;
+	FirstPersonCameraComponent->SetRelativeRotation(CamRot);
+
+
+	// -------- Smooth Crouch Capsule Height --------
+	float TargetHalfHeight = GetCharacterMovement()->IsCrouching() ? 44.0f : 88.0f;
+
+
+	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+
+
+	float NewHalfHeight = FMath::FInterpTo(CurrentHalfHeight, TargetHalfHeight, DeltaTime, 10.0f);
+
+
+	float HeightDelta = NewHalfHeight - CurrentHalfHeight;
+
+
+	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight);
+	AddActorWorldOffset(FVector(0, 0, -HeightDelta));
 }
 
 // Called to bind functionality to input
@@ -88,6 +105,18 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Bind Jump Actions
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+
+		// Lean
+		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Started, this, &APlayerCharacter::LeanLeft);
+		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Completed, this, &APlayerCharacter::LeanLeft);
+
+
+		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Started, this, &APlayerCharacter::LeanRight);
+		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Completed, this, &APlayerCharacter::LeanRight);
+
+		// Crouch
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::StartCrouch);
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &APlayerCharacter::StartCrouch);
 	}
 }
 
@@ -118,5 +147,35 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisValue.X);
 		AddControllerPitchInput(LookAxisValue.Y);
 	}
+}
+
+void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
+{
+	const bool bPressed = Value.Get<bool>();
+	if (!bPressed) return; // Toggle only on press
+
+	// Toggle Crouch
+	if (GetCharacterMovement()->IsCrouching())
+	{
+		UnCrouch();
+		GetCharacterMovement()->MaxWalkSpeed = 600.0f;
+	}
+	else
+	{
+		Crouch();
+		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+	}
+}
+
+void APlayerCharacter::LeanRight(const FInputActionValue& Value)
+{
+	const bool bPressed = Value.Get<bool>();
+	TargetLean = bPressed ? MaxLeanAngle : 0.0f;
+}
+
+void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
+{
+	const bool bPressed = Value.Get<bool>();
+	TargetLean = bPressed ? -MaxLeanAngle : 0.0f;
 }
 

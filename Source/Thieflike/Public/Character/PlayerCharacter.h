@@ -8,6 +8,10 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h" 
 #include "InputActionValue.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "PlayerCharacter.generated.h"
 
 class UInputMappingContext;
@@ -42,6 +46,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* JumpAction;
 
+	// Crouch Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* CrouchAction;
+
+	// Lean Right Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* LeanRightAction;
+
+	// Lean Left Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* LeanLeftAction;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -49,31 +64,37 @@ public:
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	// Handles 2D Movement Input
-	UFUNCTION()
+	// Handles Movement Input
 	void Move(const FInputActionValue& Value);
 
 	// Handles Look Input
-	UFUNCTION()
 	void Look(const FInputActionValue& Value);
+
+	void StartCrouch(const FInputActionValue& Value);
+	void LeanRight(const FInputActionValue& Value);
+	void LeanLeft(const FInputActionValue& Value);
+
+	//---- Leaning Functions ----//
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
+	float MaxLeanAngle = 20.0f;
+
+	// Lean Speed
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
+	float LeanSpeed = 5.0f;
+
+	// Current and Target Lean Values
+	float CurrentLean = 0.0f;
+	float TargetLean = 0.0f;
+
+	//Crouch Speed
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
+	float CrouchSpeed = 200.0f;
 
 	// First Person camera
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	UCameraComponent* FirstPersonCameraComponent;
 
-	// Offset for the first-person camera
-	UPROPERTY(EditAnywhere, Category = Camera)
-	FVector FirstPersonCameraOffset = FVector(0.0f, 0.0f, 40.0f);
-
-	// First-person primitives field of view
-	UPROPERTY(EditAnywhere, Category = Camera)
-	float FirstPersonFieldOfView = 70.0f;
-
-	// First-person primitives view scale
-	UPROPERTY(EditAnywhere, Category = Camera)
-	float FirstPersonViewScale = 0.6f;
-
-	// First-person mesh, visible only to the owning player
-	UPROPERTY(VisibleAnywhere, Category = Mesh)
+	// First Person Mesh(arms; seen only by self)
+	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
 	USkeletalMeshComponent* FirstPersonMeshComponent;
 };
