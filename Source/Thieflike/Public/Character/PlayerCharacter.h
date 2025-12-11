@@ -76,19 +76,23 @@ public:
 
 	//---- Leaning Functions ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float MaxLeanAngle = 20.0f;
+	float MaxLeanAngle;
 
 	// Lean Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float LeanSpeed = 5.0f;
+	float LeanSpeed;
 
 	// Current and Target Lean Values
-	float CurrentLean = 0.0f;
-	float TargetLean = 0.0f;
+	float CurrentLean;
+	float TargetLean;
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
 	float CrouchSpeed = 200.0f;
+
+	// Crouch Transition Speed
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
+	float CrouchTransitionSpeed = 10.0f;
 
 	// First Person camera
 	UPROPERTY(VisibleAnywhere, Category = Camera)
@@ -97,4 +101,11 @@ public:
 	// First Person Mesh(arms; seen only by self)
 	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
 	USkeletalMeshComponent* FirstPersonMeshComponent;
+
+	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+
+private:
+	// Variable to track the target height for smooth transition
+	float TargetCapsuleHalfHeight;
 };

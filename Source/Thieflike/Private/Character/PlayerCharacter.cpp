@@ -2,12 +2,15 @@
 
 
 #include "Character/PlayerCharacter.h"
-
+#include "GameFramework/CharacterMovementComponent.h"
 // Sets default values
 APlayerCharacter::APlayerCharacter()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	// Enable crouching
+	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
+	GetCharacterMovement()->MaxWalkSpeed = 600.0f;
 
 	// Player height
 	GetCapsuleComponent()->InitCapsuleSize(42.0f, 88.0);
@@ -19,7 +22,8 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Position the camera slightly above the eyes
-	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+
 	// Set camera properties
 	FirstPersonCameraComponent->FieldOfView = 90.0f;
 	FirstPersonCameraComponent->bEnableFirstPersonFieldOfView = true;
@@ -34,6 +38,11 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->SetupAttachment(FirstPersonCameraComponent);
 	FirstPersonMeshComponent->bCastDynamicShadow = false;
 	FirstPersonMeshComponent->CastShadow = false;
+
+	// Set Leaning variables
+	MaxLeanAngle = 20.0f;
+	LeanSpeed = 6.0f;
+	TargetLean = 0.0f;
 }
 
 // Called when the game starts or when spawned
@@ -65,27 +74,30 @@ void APlayerCharacter::Tick(float DeltaTime)
 	// Smooth Lean Interpolation
 	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
 
-	// Apply Roll (lean tilt)
-	FRotator CamRot = FirstPersonCameraComponent->GetRelativeRotation();
-	CamRot.Roll = CurrentLean;
-	FirstPersonCameraComponent->SetRelativeRotation(CamRot);
+	if (FirstPersonCameraComponent)
+	{
+		// Apply the lean rotation to the camera component
+		FRotator NewCameraRotation = FirstPersonCameraComponent->GetRelativeRotation();
+		NewCameraRotation.Roll = CurrentLean; // Roll axis handles the left/right tilt
+		FirstPersonCameraComponent->SetRelativeRotation(NewCameraRotation);
+	}
 
-
-	// -------- Smooth Crouch Capsule Height --------
-	float TargetHalfHeight = GetCharacterMovement()->IsCrouching() ? 44.0f : 88.0f;
-
-
+	// -------- Smooth Crouch Capsule Height Transition --------
 	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 
+	if (FMath::IsNearlyEqual(CurrentHalfHeight, TargetCapsuleHalfHeight))
+	{
+		return;
+	}
 
-	float NewHalfHeight = FMath::FInterpTo(CurrentHalfHeight, TargetHalfHeight, DeltaTime, 10.0f);
+	// Interpolate the current height towards the target height
+	float NewHalfHeight = FMath::FInterpTo(CurrentHalfHeight, TargetCapsuleHalfHeight, DeltaTime, CrouchTransitionSpeed);
 
-
+	// Calculate the difference to offset the actor so the feet stay planted
 	float HeightDelta = NewHalfHeight - CurrentHalfHeight;
 
-
-	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight);
-	AddActorWorldOffset(FVector(0, 0, -HeightDelta));
+	// Update the capsule half-height
+	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight, true);
 }
 
 // Called to bind functionality to input
@@ -116,7 +128,6 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Crouch
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::StartCrouch);
-		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &APlayerCharacter::StartCrouch);
 	}
 }
 
@@ -158,12 +169,10 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 	if (GetCharacterMovement()->IsCrouching())
 	{
 		UnCrouch();
-		GetCharacterMovement()->MaxWalkSpeed = 600.0f;
 	}
 	else
 	{
 		Crouch();
-		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
 	}
 }
 
@@ -177,5 +186,34 @@ void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
 {
 	const bool bPressed = Value.Get<bool>();
 	TargetLean = bPressed ? -MaxLeanAngle : 0.0f;
+}
+
+void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+
+	// Set the target height for the Tick function to interpolate towards (e.g., 44.0f)
+	TargetCapsuleHalfHeight = 44.0f; // Half the original height of 88.0f
+
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+		FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
+	}
+}
+
+void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+
+	// Set the target height for the Tick function to interpolate towards (e.g., 88.0f)
+	TargetCapsuleHalfHeight = 88.0f; // Original standing height
+
+	if (GetCharacterMovement())
+	{
+		// Set back to your default walk speed (e.g., 600.0f)
+		GetCharacterMovement()->MaxWalkSpeed = 600.0f;
+		FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+	}
 }
 
