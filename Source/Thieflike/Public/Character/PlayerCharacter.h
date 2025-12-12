@@ -76,7 +76,7 @@ public:
 
 	//---- Leaning Functions ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float MaxLeanAngle;
+	float MaxLeanDistance;
 
 	// Lean Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
@@ -108,4 +108,7 @@ public:
 private:
 	// Variable to track the target height for smooth transition
 	float TargetCapsuleHalfHeight;
+
+	// Store the original camera relative location
+	FVector DefaultCameraLocation;
 };

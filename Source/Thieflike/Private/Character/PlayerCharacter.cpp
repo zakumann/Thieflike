@@ -12,9 +12,6 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeed = 600.0f;
 
-	// Position the camera slightly above the eyes
-	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
-
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 
@@ -43,7 +40,7 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->CastShadow = false;
 
 	// Set Leaning variables
-	MaxLeanAngle = 20.0f;
+	MaxLeanDistance = 30.0f;
 	LeanSpeed = 6.0f;
 	TargetLean = 0.0f;
 	CurrentLean = 0.0f; // Initialize CurrentLean
@@ -81,9 +78,10 @@ void APlayerCharacter::Tick(float DeltaTime)
 	if (FirstPersonCameraComponent)
 	{
 		// Apply the lean rotation to the camera component
-		FRotator NewCameraRotation = FirstPersonCameraComponent->GetRelativeRotation();
-		NewCameraRotation.Roll = CurrentLean; // Roll axis handles the left/right tilt
-		FirstPersonCameraComponent->SetRelativeRotation(NewCameraRotation);
+		FVector NewCameraLocation = FirstPersonCameraComponent->GetRelativeLocation();
+		// We calculate the Y position relative to the default location's Y component
+		NewCameraLocation.Y = DefaultCameraLocation.Y + CurrentLean;
+		FirstPersonCameraComponent->SetRelativeLocation(NewCameraLocation);
 	}
 
 	// -------- Smooth Crouch Capsule Height Transition --------
@@ -175,13 +173,15 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 void APlayerCharacter::LeanRight(const FInputActionValue& Value)
 {
 	const bool bPressed = Value.Get<bool>();
-	TargetLean = bPressed ? MaxLeanAngle : 0.0f;
+	TargetLean = bPressed ? MaxLeanDistance : 0.0f;
+	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
 }
 
 void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
 {
 	const bool bPressed = Value.Get<bool>();
-	TargetLean = bPressed ? -MaxLeanAngle : 0.0f;
+	TargetLean = bPressed ? -MaxLeanDistance : 0.0f;
+	UE_LOG(LogTemp, Warning, TEXT("Lean Left Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
 }
 
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
