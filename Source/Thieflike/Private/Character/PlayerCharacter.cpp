@@ -12,10 +12,13 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeed = 600.0f;
 
-	// Player height
-	GetCapsuleComponent()->InitCapsuleSize(42.0f, 88.0);
+	// Position the camera slightly above the eyes
+	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 
-	// Create a first person camera component
+	// Initialize TargetCapsuleHalfHeight to current standing height
+	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+
+	// Create and attach the first person camera component
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	check(FirstPersonCameraComponent != nullptr);
 	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
@@ -31,7 +34,7 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonCameraComponent->FirstPersonFieldOfView = 90.0f;
 	FirstPersonCameraComponent->FirstPersonScale = 0.60f;
 
-	// Create a first person mesh component for the player character
+	// Create and attach the first person mesh component
 	FirstPersonMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	check(FirstPersonMeshComponent != nullptr);
 	FirstPersonMeshComponent->SetOnlyOwnerSee(true);
@@ -43,6 +46,7 @@ APlayerCharacter::APlayerCharacter()
 	MaxLeanAngle = 20.0f;
 	LeanSpeed = 6.0f;
 	TargetLean = 0.0f;
+	CurrentLean = 0.0f; // Initialize CurrentLean
 }
 
 // Called when the game starts or when spawned
@@ -63,7 +67,7 @@ void APlayerCharacter::BeginPlay()
 	}
 	// Display a debug message for five seconds. 
 	// The -1 "Key" value argument prevents the message from being updated or refreshed.
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("We are using AdventureCharacter."));
+	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("We are using FPSCharacter."));
 }
 
 // Called every frame
@@ -85,19 +89,11 @@ void APlayerCharacter::Tick(float DeltaTime)
 	// -------- Smooth Crouch Capsule Height Transition --------
 	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 
-	if (FMath::IsNearlyEqual(CurrentHalfHeight, TargetCapsuleHalfHeight))
-	{
-		return;
-	}
-
 	// Interpolate the current height towards the target height
 	float NewHalfHeight = FMath::FInterpTo(CurrentHalfHeight, TargetCapsuleHalfHeight, DeltaTime, CrouchTransitionSpeed);
 
-	// Calculate the difference to offset the actor so the feet stay planted
-	float HeightDelta = NewHalfHeight - CurrentHalfHeight;
-
 	// Update the capsule half-height
-	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight, true);
+	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight);
 }
 
 // Called to bind functionality to input
@@ -139,13 +135,16 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	// Check if the controller posessing this Actor is valid
 	if (Controller)
 	{
-		// Add left and right movement
-		const FVector Right = GetActorRightVector();
-		AddMovementInput(Right, MovementValue.X);
+		// Find out which way is forward and right
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		// Add forward and back movement
-		const FVector Forward = GetActorForwardVector();
-		AddMovementInput(Forward, MovementValue.Y);
+		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+
+		// Add movement input based on direction and input value
+		AddMovementInput(ForwardDirection, MovementValue.Y);
+		AddMovementInput(RightDirection, MovementValue.X);
 	}
 }
 
@@ -162,9 +161,6 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 
 void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 {
-	const bool bPressed = Value.Get<bool>();
-	if (!bPressed) return; // Toggle only on press
-
 	// Toggle Crouch
 	if (GetCharacterMovement()->IsCrouching())
 	{
