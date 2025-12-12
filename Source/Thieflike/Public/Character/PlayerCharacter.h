@@ -57,6 +57,11 @@ protected:
 	// Lean Left Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* LeanLeftAction;
+
+	// Sprint Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* WalkAction;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -73,6 +78,9 @@ public:
 	void StartCrouch(const FInputActionValue& Value);
 	void LeanRight(const FInputActionValue& Value);
 	void LeanLeft(const FInputActionValue& Value);
+	void StartWalk();
+	void StopWalk();
+
 
 	//---- Leaning Functions ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
@@ -93,6 +101,13 @@ public:
 	// Crouch Transition Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
 	float CrouchTransitionSpeed = 10.0f;
+
+	//Sprint Speed
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprinting")
+	float RunSpeed = 500.0f;
+
+	//Walk Speed
+	float WalkSpeed = 300.0f;
 
 	// First Person camera
 	UPROPERTY(VisibleAnywhere, Category = Camera)

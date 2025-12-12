@@ -10,7 +10,7 @@ APlayerCharacter::APlayerCharacter()
 	PrimaryActorTick.bCanEverTick = true;
 	// Enable crouching
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
-	GetCharacterMovement()->MaxWalkSpeed = 600.0f;
+	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -40,7 +40,7 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->CastShadow = false;
 
 	// Set Leaning variables
-	MaxLeanDistance = 30.0f;
+	MaxLeanDistance = 20.0f;
 	LeanSpeed = 6.0f;
 	TargetLean = 0.0f;
 	CurrentLean = 0.0f; // Initialize CurrentLean
@@ -122,6 +122,10 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Crouch
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::StartCrouch);
+
+		// Walk
+		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &APlayerCharacter::StartWalk);
+		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopWalk);
 	}
 }
 
@@ -184,6 +188,16 @@ void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
 	UE_LOG(LogTemp, Warning, TEXT("Lean Left Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
 }
 
+void APlayerCharacter::StartWalk()
+{
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+}
+
+void APlayerCharacter::StopWalk()
+{
+	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
+}
+
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
@@ -208,7 +222,7 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	if (GetCharacterMovement())
 	{
 		// Set back to your default walk speed (e.g., 600.0f)
-		GetCharacterMovement()->MaxWalkSpeed = 600.0f;
+		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 		FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 	}
 }
