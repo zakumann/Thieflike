@@ -15,14 +15,22 @@ APlayerCharacter::APlayerCharacter()
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 
+	// Create and attach the first person Spring Arm component
+	FirstPersonSpringArmComponent = CreateDefaultSubobject<USpringArmComponent>(TEXT("FirstPersonSpringArm"));
+	check(FirstPersonSpringArmComponent != nullptr);
+	FirstPersonSpringArmComponent->SetupAttachment(GetCapsuleComponent());
+	FirstPersonSpringArmComponent->bUsePawnControlRotation = true; // Rotate the arm based on the controller
+	// Position the spring arm at the character's eye level
+	FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+	// Set the arm length to zero to position the camera at the character's location
+	FirstPersonSpringArmComponent->TargetArmLength = 0.0f;
+
 	// Create and attach the first person camera component
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	check(FirstPersonCameraComponent != nullptr);
-	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
-	FirstPersonCameraComponent->bUsePawnControlRotation = true;
-
-	// Position the camera slightly above the eyes
-	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+	FirstPersonCameraComponent->SetupAttachment(FirstPersonSpringArmComponent, USpringArmComponent::SocketName);// Attach to the end of the spring arm
+	// Disable pawn control rotation, we want the spring arm to handle it
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
 
 	// Set camera properties
 	FirstPersonCameraComponent->FieldOfView = 90.0f;
@@ -75,13 +83,13 @@ void APlayerCharacter::Tick(float DeltaTime)
 	// Smooth Lean Interpolation
 	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
 
-	if (FirstPersonCameraComponent)
+	if (FirstPersonSpringArmComponent)
 	{
 		// Apply the lean rotation to the camera component
-		FVector NewCameraLocation = FirstPersonCameraComponent->GetRelativeLocation();
+		FVector CurrentSocketOffset = FirstPersonSpringArmComponent->SocketOffset;
 		// We calculate the Y position relative to the default location's Y component
-		NewCameraLocation.Y = DefaultCameraLocation.Y + CurrentLean;
-		FirstPersonCameraComponent->SetRelativeLocation(NewCameraLocation);
+		CurrentSocketOffset.Y = CurrentLean;
+		FirstPersonSpringArmComponent->SocketOffset = CurrentSocketOffset;
 	}
 
 	// -------- Smooth Crouch Capsule Height Transition --------
@@ -205,10 +213,10 @@ void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHei
 	// Set the target height for the Tick function to interpolate towards (e.g., 44.0f)
 	TargetCapsuleHalfHeight = 44.0f; // Half the original height of 88.0f
 
-	if (GetCharacterMovement())
+	if (GetCharacterMovement() && FirstPersonSpringArmComponent)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
-		FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
+		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
 	}
 }
 
@@ -219,11 +227,11 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	// Set the target height for the Tick function to interpolate towards (e.g., 88.0f)
 	TargetCapsuleHalfHeight = 88.0f; // Original standing height
 
-	if (GetCharacterMovement())
+	if (GetCharacterMovement() && FirstPersonSpringArmComponent)
 	{
 		// Set back to your default walk speed (e.g., 600.0f)
 		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
-		FirstPersonCameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 	}
 }
 

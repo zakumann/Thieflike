@@ -12,6 +12,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "PlayerCharacter.generated.h"
 
 class UInputMappingContext;
@@ -109,6 +110,10 @@ public:
 	//Walk Speed
 	float WalkSpeed = 300.0f;
 
+	// First Person Spring Arm
+	UPROPERTY(VisibleAnywhere, Category = Camera)
+	USpringArmComponent* FirstPersonSpringArmComponent;
+
 	// First Person camera
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	UCameraComponent* FirstPersonCameraComponent;
@@ -125,5 +130,5 @@ private:
 	float TargetCapsuleHalfHeight;
 
 	// Store the original camera relative location
-	FVector DefaultCameraLocation;
+	FVector DefaultSpringArmLocation;
 };
