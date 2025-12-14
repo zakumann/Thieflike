@@ -86,6 +86,9 @@ public:
 	//---- Leaning Functions ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
 	float MaxLeanDistance;
+	// Lean Rotation Angle
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
+	float MaxLeanRotationAngle;
 
 	// Lean Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
@@ -94,6 +97,10 @@ public:
 	// Current and Target Lean Values
 	float CurrentLean;
 	float TargetLean;
+
+	// Current and Target Lean Roll Values
+	float CurrentLeanRoll;
+	float TargetLeanRoll;
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")

@@ -30,7 +30,7 @@ APlayerCharacter::APlayerCharacter()
 	check(FirstPersonCameraComponent != nullptr);
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonSpringArmComponent, USpringArmComponent::SocketName);// Attach to the end of the spring arm
 	// Disable pawn control rotation, we want the spring arm to handle it
-	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Set camera properties
 	FirstPersonCameraComponent->FieldOfView = 90.0f;
@@ -49,9 +49,12 @@ APlayerCharacter::APlayerCharacter()
 
 	// Set Leaning variables
 	MaxLeanDistance = 20.0f;
+	MaxLeanRotationAngle = 10.0f;
 	LeanSpeed = 6.0f;
 	TargetLean = 0.0f;
 	CurrentLean = 0.0f; // Initialize CurrentLean
+	TargetLeanRoll = 0.0f;
+	CurrentLeanRoll = 0.0f;
 }
 
 // Called when the game starts or when spawned
@@ -80,16 +83,23 @@ void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Smooth Lean Interpolation
-	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
+	// -------- Smooth Lean Transition --------
 
-	if (FirstPersonSpringArmComponent)
+	if (FirstPersonSpringArmComponent && FirstPersonCameraComponent)
 	{
 		// Apply the lean rotation to the camera component
+		CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
 		FVector CurrentSocketOffset = FirstPersonSpringArmComponent->SocketOffset;
 		// We calculate the Y position relative to the default location's Y component
 		CurrentSocketOffset.Y = CurrentLean;
 		FirstPersonSpringArmComponent->SocketOffset = CurrentSocketOffset;
+
+		// Apply lean rotation
+		CurrentLeanRoll = FMath::FInterpTo(CurrentLeanRoll, TargetLeanRoll, DeltaTime, LeanSpeed);
+		// Create a new rotator with the current lean roll
+		FRotator NewCameraRotation = FRotator(0.0f, 0.0f, CurrentLeanRoll);
+		// Camera rotation is relative to the spring arm
+		FirstPersonCameraComponent->SetRelativeRotation(NewCameraRotation);
 	}
 
 	// -------- Smooth Crouch Capsule Height Transition --------
@@ -186,6 +196,7 @@ void APlayerCharacter::LeanRight(const FInputActionValue& Value)
 {
 	const bool bPressed = Value.Get<bool>();
 	TargetLean = bPressed ? MaxLeanDistance : 0.0f;
+	TargetLeanRoll = bPressed ? MaxLeanRotationAngle : 0.0f;
 	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
 }
 
@@ -193,6 +204,7 @@ void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
 {
 	const bool bPressed = Value.Get<bool>();
 	TargetLean = bPressed ? -MaxLeanDistance : 0.0f;
+	TargetLeanRoll = bPressed ? -MaxLeanRotationAngle : 0.0f;
 	UE_LOG(LogTemp, Warning, TEXT("Lean Left Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
 }
 
@@ -213,10 +225,14 @@ void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHei
 	// Set the target height for the Tick function to interpolate towards (e.g., 44.0f)
 	TargetCapsuleHalfHeight = 44.0f; // Half the original height of 88.0f
 
-	if (GetCharacterMovement() && FirstPersonSpringArmComponent)
+	if (GetCharacterMovement() && FirstPersonSpringArmComponent && FirstPersonCameraComponent)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
+		TargetLeanRoll = 0.0f; // Reset lean when crouching
+		TargetLean = 0.0f;
+		// Camera rotation reset
+		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 }
 
@@ -227,11 +243,15 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	// Set the target height for the Tick function to interpolate towards (e.g., 88.0f)
 	TargetCapsuleHalfHeight = 88.0f; // Original standing height
 
-	if (GetCharacterMovement() && FirstPersonSpringArmComponent)
+	if (GetCharacterMovement() && FirstPersonSpringArmComponent && FirstPersonCameraComponent)
 	{
 		// Set back to your default walk speed (e.g., 600.0f)
 		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+		TargetLeanRoll = 0.0f; // Reset lean when crouching
+		TargetLean = 0.0f;
+		// Camera rotation reset
+		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 }
 
