@@ -3,6 +3,12 @@
 
 #include "Character/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "EngineUtils.h" // For TActorIterator
+#include "Engine/DirectionalLight.h" // To easily find the main light source
+#include "Components/PointLightComponent.h" // For point lights
+#include "Components/SpotLightComponent.h" // For spot lights
+#include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
+
 // Sets default values
 APlayerCharacter::APlayerCharacter()
 {
@@ -82,6 +88,9 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Calculate visibility every frame
+	CalculateVisibility();
 
 	// -------- Smooth Lean Transition --------
 
@@ -216,6 +225,57 @@ void APlayerCharacter::StartWalk()
 void APlayerCharacter::StopWalk()
 {
 	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
+}
+
+// Calculate the player's visibility based on lighting conditions
+void APlayerCharacter::CalculateVisibility()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	FVector StartLocation = GetActorLocation(); // Or a specific socket/height on the character
+
+	float AccumulatedLightValue = AmbientLightFactor * 100.0f; // Start with a base ambient light level
+
+	// Use a robust line trace function
+	FHitResult HitResult;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this); // Ignore the player character itself
+
+	// Check against the main Directional Light (Sun/Moon)
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		ADirectionalLight* DirLight = *It;
+		if (DirLight && DirLight->GetLightComponent()->IsVisible())
+		{
+			FVector LightDirection = -DirLight->GetActorForwardVector();
+			// Trace a long way in the direction of the light
+			FVector EndLocation = StartLocation + (LightDirection * 100000.0f);
+
+			bool bHit = World->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, Params);
+
+			// If we didn't hit anything, we have clear line of sight to the main light source
+			if (!bHit)
+			{
+				// Assign a high visibility value for direct sunlight
+				AccumulatedLightValue += 90.0f;
+				break; // We found the main light, no need to check others in the iterator
+			}
+		}
+	}
+
+	// You could optionally iterate through Point/Spot lights here as well, 
+	// but the logic above gives a strong 'in shadow' or 'in light' value for outdoor/main lighting setups.
+
+	// Clamp the final value and interpolate smoothly
+	float NewVisibilityPercent = FMath::Clamp(AccumulatedLightValue, 0.0f, 100.0f);
+
+	CurrentVisibility = FMath::FInterpTo(
+		CurrentVisibility,
+		NewVisibilityPercent,
+		World->GetDeltaSeconds(),
+		VisibilityInterpSpeed
+	);
 }
 
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)

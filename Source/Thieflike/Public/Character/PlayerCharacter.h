@@ -13,11 +13,14 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/EngineTypes.h"
 #include "PlayerCharacter.generated.h"
 
 class UInputMappingContext;
 class UInputAction;
 class UInputComponent;
+
 
 UCLASS()
 class THIEFLIKE_API APlayerCharacter : public ACharacter
@@ -101,6 +104,28 @@ public:
 	// Current and Target Lean Roll Values
 	float CurrentLeanRoll;
 	float TargetLeanRoll;
+
+	//---- Stealth System Variables & Functions ----//
+
+	/** Current visibility percentage (0 = fully hidden, 100 = fully visible) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
+	float CurrentVisibility;
+
+	/** Calculates the current visibility of the character based on surrounding light */
+	UFUNCTION(BlueprintCallable, Category = "Stealth")
+	void CalculateVisibility();
+
+	// Default exposure needed to be visible (adjustable in Blueprint)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
+	float VisibilityThreshold = 0.5f;
+
+	// How quickly the visibility value changes
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
+	float VisibilityInterpSpeed = 5.0f;
+
+	// A factor to simulate ambient light when not directly in a bright spot
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
+	float AmbientLightFactor = 0.1f; // Represents 10% ambient light when completely hidden from direct light
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
