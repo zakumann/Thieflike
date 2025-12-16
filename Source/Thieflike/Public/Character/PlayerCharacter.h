@@ -84,6 +84,7 @@ public:
 	void LeanLeft(const FInputActionValue& Value);
 	void StartWalk();
 	void StopWalk();
+	void UpdateLean(float DeltaTime);
 
 
 	//---- Leaning Functions ----//

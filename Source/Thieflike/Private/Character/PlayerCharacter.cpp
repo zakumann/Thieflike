@@ -55,12 +55,14 @@ APlayerCharacter::APlayerCharacter()
 
 	// Set Leaning variables
 	MaxLeanDistance = 20.0f;
+	// Set Rotation Angle
 	MaxLeanRotationAngle = 10.0f;
+	// Set Lean Speed
 	LeanSpeed = 6.0f;
-	TargetLean = 0.0f;
+	TargetLean = 0.0f; // Initialize TargetLean
 	CurrentLean = 0.0f; // Initialize CurrentLean
-	TargetLeanRoll = 0.0f;
-	CurrentLeanRoll = 0.0f;
+	TargetLeanRoll = 0.0f;// Initialize TargetLeanRoll
+	CurrentLeanRoll = 0.0f; // Initialize CurrentLeanRoll
 }
 
 // Called when the game starts or when spawned
@@ -91,25 +93,8 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// Calculate visibility every frame
 	CalculateVisibility();
-
-	// -------- Smooth Lean Transition --------
-
-	if (FirstPersonSpringArmComponent && FirstPersonCameraComponent)
-	{
-		// Apply the lean rotation to the camera component
-		CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
-		FVector CurrentSocketOffset = FirstPersonSpringArmComponent->SocketOffset;
-		// We calculate the Y position relative to the default location's Y component
-		CurrentSocketOffset.Y = CurrentLean;
-		FirstPersonSpringArmComponent->SocketOffset = CurrentSocketOffset;
-
-		// Apply lean rotation
-		CurrentLeanRoll = FMath::FInterpTo(CurrentLeanRoll, TargetLeanRoll, DeltaTime, LeanSpeed);
-		// Create a new rotator with the current lean roll
-		FRotator NewCameraRotation = FRotator(0.0f, 0.0f, CurrentLeanRoll);
-		// Camera rotation is relative to the spring arm
-		FirstPersonCameraComponent->SetRelativeRotation(NewCameraRotation);
-	}
+	// Update Leaning every frame
+	UpdateLean(DeltaTime);
 
 	// -------- Smooth Crouch Capsule Height Transition --------
 	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -207,6 +192,7 @@ void APlayerCharacter::LeanRight(const FInputActionValue& Value)
 	TargetLean = bPressed ? MaxLeanDistance : 0.0f;
 	TargetLeanRoll = bPressed ? MaxLeanRotationAngle : 0.0f;
 	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
+	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLeanAngle: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLeanRoll);
 }
 
 void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
@@ -215,6 +201,7 @@ void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
 	TargetLean = bPressed ? -MaxLeanDistance : 0.0f;
 	TargetLeanRoll = bPressed ? -MaxLeanRotationAngle : 0.0f;
 	UE_LOG(LogTemp, Warning, TEXT("Lean Left Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
+	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLeanAngle: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLeanRoll);
 }
 
 void APlayerCharacter::StartWalk()
@@ -227,55 +214,51 @@ void APlayerCharacter::StopWalk()
 	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 }
 
+void APlayerCharacter::UpdateLean(float DeltaTime)
+{
+	float TargetRoll = GetControlRotation().Roll;
+
+	// -------- Smooth Lean Transition --------
+	if (FirstPersonSpringArmComponent && FirstPersonCameraComponent)
+	{
+		// Apply the lean rotation to the camera component
+		CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
+		FVector CurrentSocketOffset = FirstPersonSpringArmComponent->SocketOffset;
+		// We calculate the Y position relative to the default location's Y component
+		CurrentSocketOffset.Y = CurrentLean;
+		FirstPersonSpringArmComponent->SocketOffset = CurrentSocketOffset;
+
+		// Apply lean rotation
+		CurrentLeanRoll = FMath::FInterpTo(CurrentLeanRoll, TargetLeanRoll, DeltaTime, LeanSpeed);
+		FRotator CurrentCameraRotation = FirstPersonCameraComponent->GetRelativeRotation();
+		CurrentCameraRotation.Roll = CurrentLeanRoll;
+		FirstPersonCameraComponent->SetRelativeRotation(CurrentCameraRotation);
+	}
+}
+
 // Calculate the player's visibility based on lighting conditions
 void APlayerCharacter::CalculateVisibility()
 {
-	UWorld* World = GetWorld();
-	if (!World) return;
+	// For simplicity, we'll set CurrentVisibility to a fixed value.
+	// In a real implementation, you would analyze the lighting conditions around the character.
+	CurrentVisibility = 50.0f; // Placeholder value
 
-	FVector StartLocation = GetActorLocation(); // Or a specific socket/height on the character
-
-	float AccumulatedLightValue = AmbientLightFactor * 100.0f; // Start with a base ambient light level
-
-	// Use a robust line trace function
-	FHitResult HitResult;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this); // Ignore the player character itself
-
-	// Check against the main Directional Light (Sun/Moon)
-	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	// Set visibility based on exposure threshold
+	if (CurrentVisibility >= VisibilityThreshold * 100.0f)
 	{
-		ADirectionalLight* DirLight = *It;
-		if (DirLight && DirLight->GetLightComponent()->IsVisible())
-		{
-			FVector LightDirection = -DirLight->GetActorForwardVector();
-			// Trace a long way in the direction of the light
-			FVector EndLocation = StartLocation + (LightDirection * 100000.0f);
-
-			bool bHit = World->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, Params);
-
-			// If we didn't hit anything, we have clear line of sight to the main light source
-			if (!bHit)
-			{
-				// Assign a high visibility value for direct sunlight
-				AccumulatedLightValue += 90.0f;
-				break; // We found the main light, no need to check others in the iterator
-			}
-		}
+		// Player is visible
+		// You can add logic here to notify AI or trigger events
+		APlayerCharacter::CurrentVisibility = 100.0f;
+		UE_LOG(LogTemp, Warning, TEXT("Player is Visible. CurrentVisibility: %f"), CurrentVisibility);
+	}
+	else
+	{
+		// Player is hidden
+		// You can add logic here for stealth mechanics
+		APlayerCharacter::CurrentVisibility = 0.0f;
+		UE_LOG(LogTemp, Warning, TEXT("Player is Hidden. CurrentVisibility: %f"), CurrentVisibility);
 	}
 
-	// You could optionally iterate through Point/Spot lights here as well, 
-	// but the logic above gives a strong 'in shadow' or 'in light' value for outdoor/main lighting setups.
-
-	// Clamp the final value and interpolate smoothly
-	float NewVisibilityPercent = FMath::Clamp(AccumulatedLightValue, 0.0f, 100.0f);
-
-	CurrentVisibility = FMath::FInterpTo(
-		CurrentVisibility,
-		NewVisibilityPercent,
-		World->GetDeltaSeconds(),
-		VisibilityInterpSpeed
-	);
 }
 
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
