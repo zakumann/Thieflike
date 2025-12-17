@@ -54,17 +54,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* CrouchAction;
 
-	// Lean Right Input Actions
+	// Lean Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* LeanRightAction;
 
-	// Lean Left Input Actions
+	// Lean Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* LeanLeftAction;
 
 	// Sprint Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
-	UInputAction* WalkAction;
+	UInputAction* SprintAction;
 
 public:	
 	// Called every frame
@@ -80,31 +80,17 @@ public:
 	void Look(const FInputActionValue& Value);
 
 	void StartCrouch(const FInputActionValue& Value);
-	void LeanRight(const FInputActionValue& Value);
-	void LeanLeft(const FInputActionValue& Value);
-	void StartWalk();
-	void StopWalk();
-	void UpdateLean(float DeltaTime);
+	void StartLeanRight(const FInputActionValue& Value);
+	void StopLeanRight(const FInputActionValue& Value);
+	void StartLeanLeft(const FInputActionValue& Value);
+	void StopLeanLeft(const FInputActionValue& Value);
+	void StartSprint();
+	void StopSprint();
 
 
 	//---- Leaning Functions ----//
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float MaxLeanDistance;
-	// Lean Rotation Angle
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float MaxLeanRotationAngle;
-
-	// Lean Speed
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
-	float LeanSpeed;
-
-	// Current and Target Lean Values
-	float CurrentLean;
-	float TargetLean;
-
-	// Current and Target Lean Roll Values
-	float CurrentLeanRoll;
-	float TargetLeanRoll;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Leaning")
+	float LeanAmount = 0.0f;
 
 	//---- Stealth System Variables & Functions ----//
 
@@ -130,7 +116,7 @@ public:
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
-	float CrouchSpeed = 200.0f;
+	float CrouchSpeed = 150.0f;
 
 	// Crouch Transition Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
@@ -138,10 +124,14 @@ public:
 
 	//Sprint Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprinting")
-	float RunSpeed = 500.0f;
+	float RunSpeed = 600.0f;
 
 	//Walk Speed
 	float WalkSpeed = 300.0f;
+
+	// Is Lean
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Leaning")
+	bool bIsLeaning = false;
 
 	// First Person Spring Arm
 	UPROPERTY(VisibleAnywhere, Category = Camera)

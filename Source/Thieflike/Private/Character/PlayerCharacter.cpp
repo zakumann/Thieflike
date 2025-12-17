@@ -16,7 +16,7 @@ APlayerCharacter::APlayerCharacter()
 	PrimaryActorTick.bCanEverTick = true;
 	// Enable crouching
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
-	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -52,17 +52,6 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->SetupAttachment(FirstPersonCameraComponent);
 	FirstPersonMeshComponent->bCastDynamicShadow = false;
 	FirstPersonMeshComponent->CastShadow = false;
-
-	// Set Leaning variables
-	MaxLeanDistance = 20.0f;
-	// Set Rotation Angle
-	MaxLeanRotationAngle = 10.0f;
-	// Set Lean Speed
-	LeanSpeed = 6.0f;
-	TargetLean = 0.0f; // Initialize TargetLean
-	CurrentLean = 0.0f; // Initialize CurrentLean
-	TargetLeanRoll = 0.0f;// Initialize TargetLeanRoll
-	CurrentLeanRoll = 0.0f; // Initialize CurrentLeanRoll
 }
 
 // Called when the game starts or when spawned
@@ -93,8 +82,6 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// Calculate visibility every frame
 	CalculateVisibility();
-	// Update Leaning every frame
-	UpdateLean(DeltaTime);
 
 	// -------- Smooth Crouch Capsule Height Transition --------
 	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -125,19 +112,17 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		// Lean
-		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Started, this, &APlayerCharacter::LeanLeft);
-		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Completed, this, &APlayerCharacter::LeanLeft);
-
-
-		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Started, this, &APlayerCharacter::LeanRight);
-		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Completed, this, &APlayerCharacter::LeanRight);
+		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Started, this, &APlayerCharacter::StartLeanRight);
+		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopLeanRight);
+		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Started, this, &APlayerCharacter::StartLeanLeft);
+		EnhancedInputComponent->BindAction(LeanLeftAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopLeanLeft);
 
 		// Crouch
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::StartCrouch);
 
 		// Walk
-		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &APlayerCharacter::StartWalk);
-		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopWalk);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &APlayerCharacter::StartSprint);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopSprint);
 	}
 }
 
@@ -186,54 +171,37 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 	}
 }
 
-void APlayerCharacter::LeanRight(const FInputActionValue& Value)
+void APlayerCharacter::StartLeanRight(const FInputActionValue& Value)
 {
-	const bool bPressed = Value.Get<bool>();
-	TargetLean = bPressed ? MaxLeanDistance : 0.0f;
-	TargetLeanRoll = bPressed ? MaxLeanRotationAngle : 0.0f;
-	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
-	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLeanAngle: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLeanRoll);
+	UE_LOG(LogTemp, Warning, TEXT("Lean Right Started"));
 }
 
-void APlayerCharacter::LeanLeft(const FInputActionValue& Value)
+void APlayerCharacter::StopLeanRight(const FInputActionValue& Value)
 {
-	const bool bPressed = Value.Get<bool>();
-	TargetLean = bPressed ? -MaxLeanDistance : 0.0f;
-	TargetLeanRoll = bPressed ? -MaxLeanRotationAngle : 0.0f;
-	UE_LOG(LogTemp, Warning, TEXT("Lean Left Called. bPressed: %s, TargetLean: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLean);
-	UE_LOG(LogTemp, Warning, TEXT("Lean Right Called. bPressed: %s, TargetLeanAngle: %f"), bPressed ? TEXT("true") : TEXT("false"), TargetLeanRoll);
+	UE_LOG(LogTemp, Warning, TEXT("Lean Right Stopped"));
 }
 
-void APlayerCharacter::StartWalk()
+void APlayerCharacter::StartLeanLeft(const FInputActionValue& Value)
 {
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	UE_LOG(LogTemp, Warning, TEXT("Lean Left Started"));
 }
 
-void APlayerCharacter::StopWalk()
+void APlayerCharacter::StopLeanLeft(const FInputActionValue& Value)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Lean Left Stopped"));
+}
+
+
+
+
+void APlayerCharacter::StartSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 }
 
-void APlayerCharacter::UpdateLean(float DeltaTime)
+void APlayerCharacter::StopSprint()
 {
-	float TargetRoll = GetControlRotation().Roll;
-
-	// -------- Smooth Lean Transition --------
-	if (FirstPersonSpringArmComponent && FirstPersonCameraComponent)
-	{
-		// Apply the lean rotation to the camera component
-		CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, LeanSpeed);
-		FVector CurrentSocketOffset = FirstPersonSpringArmComponent->SocketOffset;
-		// We calculate the Y position relative to the default location's Y component
-		CurrentSocketOffset.Y = CurrentLean;
-		FirstPersonSpringArmComponent->SocketOffset = CurrentSocketOffset;
-
-		// Apply lean rotation
-		CurrentLeanRoll = FMath::FInterpTo(CurrentLeanRoll, TargetLeanRoll, DeltaTime, LeanSpeed);
-		FRotator CurrentCameraRotation = FirstPersonCameraComponent->GetRelativeRotation();
-		CurrentCameraRotation.Roll = CurrentLeanRoll;
-		FirstPersonCameraComponent->SetRelativeRotation(CurrentCameraRotation);
-	}
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
 
 // Calculate the player's visibility based on lighting conditions
@@ -249,14 +217,12 @@ void APlayerCharacter::CalculateVisibility()
 		// Player is visible
 		// You can add logic here to notify AI or trigger events
 		APlayerCharacter::CurrentVisibility = 100.0f;
-		UE_LOG(LogTemp, Warning, TEXT("Player is Visible. CurrentVisibility: %f"), CurrentVisibility);
 	}
 	else
 	{
 		// Player is hidden
 		// You can add logic here for stealth mechanics
 		APlayerCharacter::CurrentVisibility = 0.0f;
-		UE_LOG(LogTemp, Warning, TEXT("Player is Hidden. CurrentVisibility: %f"), CurrentVisibility);
 	}
 
 }
@@ -270,10 +236,8 @@ void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHei
 
 	if (GetCharacterMovement() && FirstPersonSpringArmComponent && FirstPersonCameraComponent)
 	{
-		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
-		TargetLeanRoll = 0.0f; // Reset lean when crouching
-		TargetLean = 0.0f;
 		// Camera rotation reset
 		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	}
@@ -289,10 +253,8 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	if (GetCharacterMovement() && FirstPersonSpringArmComponent && FirstPersonCameraComponent)
 	{
 		// Set back to your default walk speed (e.g., 600.0f)
-		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
-		TargetLeanRoll = 0.0f; // Reset lean when crouching
-		TargetLean = 0.0f;
 		// Camera rotation reset
 		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	}
