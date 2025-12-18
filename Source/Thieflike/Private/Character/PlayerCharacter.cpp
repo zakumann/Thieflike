@@ -295,6 +295,8 @@ void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHei
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
 		// Camera rotation reset
 		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
+		TargetLeanOffset = 0.0f;
+		TargetLeanRoll = 0.0f;
 	}
 }
 
@@ -312,6 +314,8 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 		FirstPersonSpringArmComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 		// Camera rotation reset
 		FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
+		TargetLeanOffset = 0.0f;
+		TargetLeanRoll = 0.0f;
 	}
 }
 
