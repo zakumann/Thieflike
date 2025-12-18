@@ -36,7 +36,7 @@ APlayerCharacter::APlayerCharacter()
 	check(FirstPersonCameraComponent != nullptr);
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonSpringArmComponent, USpringArmComponent::SocketName);// Attach to the end of the spring arm
 	// Disable pawn control rotation, we want the spring arm to handle it
-	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
 
 	// Set camera properties
 	FirstPersonCameraComponent->FieldOfView = 90.0f;
@@ -79,6 +79,25 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (!FirstPersonSpringArmComponent && !FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	float AllowedLean = GetAllowedLeanOffset(TargetLeanOffset); //GetAllowedLeanOffset is for Lean to the Playercharacter FirstPersonSpringArmComponent.
+	float LeanRatio = (MaxLeanOffset != 0.f) ? FMath::Abs(CurrentLeanOffset / MaxLeanOffset) : 0.f; // While Leaning Roll until contacts the wall
+
+	CurrentLeanOffset = FMath::FInterpTo(CurrentLeanOffset, AllowedLean, DeltaTime, LeanInterpSpeed);
+	CurrentLeanRoll = FMath::FInterpTo(CurrentLeanRoll, TargetLeanRoll * LeanRatio, DeltaTime, LeanInterpSpeed);
+
+	// Move camera right/left
+	FVector SocketOffset = FirstPersonSpringArmComponent->SocketOffset;
+	SocketOffset.Y = CurrentLeanOffset;
+	FirstPersonSpringArmComponent->SocketOffset = SocketOffset;
+
+	// Roll
+	FirstPersonCameraComponent->SetRelativeRotation(FRotator(0.f, 0.f, CurrentLeanRoll));
 
 	// Calculate visibility every frame
 	CalculateVisibility();
@@ -174,21 +193,29 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 void APlayerCharacter::StartLeanRight(const FInputActionValue& Value)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Lean Right Started"));
+	TargetLeanOffset = +MaxLeanOffset;
+	TargetLeanRoll = +MaxLeanRoll;
 }
 
 void APlayerCharacter::StopLeanRight(const FInputActionValue& Value)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Lean Right Stopped"));
+	TargetLeanOffset = 0.0f;
+	TargetLeanRoll = 0.0f;
 }
 
 void APlayerCharacter::StartLeanLeft(const FInputActionValue& Value)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Lean Left Started"));
+	TargetLeanOffset = -MaxLeanOffset;
+	TargetLeanRoll = -MaxLeanRoll;
 }
 
 void APlayerCharacter::StopLeanLeft(const FInputActionValue& Value)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Lean Left Stopped"));
+	TargetLeanOffset = 0.0f;
+	TargetLeanRoll = 0.0f;
 }
 
 
@@ -202,6 +229,34 @@ void APlayerCharacter::StartSprint()
 void APlayerCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+}
+
+float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
+{
+	if (!GetWorld()) return DesiredLean;
+
+	FVector Start = FirstPersonCameraComponent->GetComponentLocation();
+
+	// Lean direction(Right/Left)
+	FVector RightVector = FirstPersonCameraComponent->GetRightVector();
+	FVector Direction = (DesiredLean > 0.f) ? RightVector : -RightVector;
+
+	FVector End = Start + Direction * LeanCheckDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+
+	if (bHit)
+	{
+		float Distance = FVector::Distance(Start, Hit.ImpactPoint);
+		float Allowed = Distance - LeanSafetyMargin;
+
+		return FMath::Clamp(Allowed, 0.f, FMath::Abs(DesiredLean)) * FMath::Sign(DesiredLean);
+	}
+	return DesiredLean;
 }
 
 // Calculate the player's visibility based on lighting conditions

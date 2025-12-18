@@ -89,8 +89,30 @@ public:
 
 
 	//---- Leaning Functions ----//
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Leaning")
-	float LeanAmount = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
+	float MaxLeanOffset = 20.0f; // Move camera right/left
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "leaning")
+	float MaxLeanRoll = 12.0f; // Leaning Camera
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "leaning")
+	float LeanInterpSpeed = 8.0f;
+
+	// Runtime
+	float TargetLeanOffset = 0.0f;
+	float CurrentLeanOffset = 0.0f;
+
+	float TargetLeanRoll = 0.0f;
+	float CurrentLeanRoll = 0.0f;
+
+	// Lean Wall Check
+	UPROPERTY(EditAnywhere, Category = "Leaning|WallCheck")
+	float LeanCheckDistance = 35.0f;   // Check the leanDistance
+
+	UPROPERTY(EditAnywhere, Category = "Leaning|WallCheck")
+	float LeanSafetyMargin = 5.0f;     // between Wall and Lean safety Margin
+
+	float GetAllowedLeanOffset(float DesiredLean);
 
 	//---- Stealth System Variables & Functions ----//
 
@@ -128,10 +150,6 @@ public:
 
 	//Walk Speed
 	float WalkSpeed = 300.0f;
-
-	// Is Lean
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Leaning")
-	bool bIsLeaning = false;
 
 	// First Person Spring Arm
 	UPROPERTY(VisibleAnywhere, Category = Camera)
