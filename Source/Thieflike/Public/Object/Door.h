@@ -23,4 +23,27 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
+	void OnInteract(const FVector& InteractorForward);
+
+	UFUNCTION()
+	void CloseDoor(float DeltaTime);
+
+	UFUNCTION()
+	void OpenDoor(float DeltaTime);
+
+	UPROPERTY(VisibleAnywhere, Category = "Mesh")
+	class UStaticMeshComponent* Door;
+
+	UFUNCTION()
+	void ToggleDoor(FVector ForwardVector);
+
+	bool Opening;
+	bool Closing;
+	bool isClosed;
+
+	float DotP;
+	float MaxDegree;
+	float AddRotation;
+	float PosNeg;
+	float DoorCurrentRotation;
 };

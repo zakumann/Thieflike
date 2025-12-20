@@ -8,6 +8,7 @@
 #include "Components/PointLightComponent.h" // For point lights
 #include "Components/SpotLightComponent.h" // For spot lights
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
+#include "Object/Door.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -142,6 +143,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Walk
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &APlayerCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &APlayerCharacter::StopSprint);
+
+		// Interact
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
 	}
 }
 
@@ -219,7 +223,24 @@ void APlayerCharacter::StopLeanLeft(const FInputActionValue& Value)
 }
 
 
+void APlayerCharacter::Interact()
+{
+	FHitResult HitResult;
+	FVector Start = FirstPersonCameraComponent->GetComponentLocation();
+	FVector End = Start + FirstPersonCameraComponent->GetForwardVector() * InteractLineTraceLength;
 
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECollisionChannel::ECC_Visibility, Params);
+
+	ADoor* Door = Cast<ADoor>(HitResult.GetActor());
+	if (Door)
+	{
+		FVector PlayerForward = GetActorForwardVector();
+		Door->OnInteract(PlayerForward);
+	}
+}
 
 void APlayerCharacter::StartSprint()
 {

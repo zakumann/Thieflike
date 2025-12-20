@@ -66,6 +66,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* SprintAction;
 
+	// Interact Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* InteractAction;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -87,6 +91,11 @@ public:
 	void StartSprint();
 	void StopSprint();
 
+	//---- Interact ----//
+	void Interact();
+
+	UPROPERTY(EditAnywhere)
+	float InteractLineTraceLength = 350.f;
 
 	//---- Leaning Functions ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leaning")
