@@ -83,6 +83,8 @@ public:
 	// Handles Look Input
 	void Look(const FInputActionValue& Value);
 
+	void Jump();
+
 	void StartCrouch(const FInputActionValue& Value);
 	void StartLeanRight(const FInputActionValue& Value);
 	void StopLeanRight(const FInputActionValue& Value);
@@ -105,7 +107,7 @@ public:
 	float MaxLeanRoll = 12.0f; // Leaning Camera
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "leaning")
-	float LeanInterpSpeed = 8.0f;
+	float LeanInterpSpeed = 12.0f;
 
 	// Runtime
 	float TargetLeanOffset = 0.0f;
@@ -155,7 +157,7 @@ public:
 
 	//Sprint Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sprinting")
-	float RunSpeed = 600.0f;
+	float RunSpeed = 600.0f; 
 
 	//Walk Speed
 	float WalkSpeed = 300.0f;

@@ -111,6 +111,11 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// Update the capsule half-height
 	GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight);
+
+	// Smooth camera height
+	FVector CameraLocation = FirstPersonSpringArmComponent->GetRelativeLocation();
+	CameraLocation.Z = FMath::FInterpTo(CameraLocation.Z, TargetCapsuleHalfHeight, DeltaTime,CrouchTransitionSpeed);
+	FirstPersonSpringArmComponent->SetRelativeLocation(CameraLocation);
 }
 
 // Called to bind functionality to input
@@ -179,6 +184,11 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisValue.X);
 		AddControllerPitchInput(LookAxisValue.Y);
 	}
+}
+
+void APlayerCharacter::Jump()
+{
+	Super::Jump();
 }
 
 void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
