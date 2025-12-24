@@ -2,22 +2,25 @@
 
 
 #include "Character/PlayerCharacter.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h" // For TActorIterator
 #include "Engine/DirectionalLight.h" // To easily find the main light source
 #include "Components/PointLightComponent.h" // For point lights
 #include "Components/SpotLightComponent.h" // For spot lights
+#include "Components/CustomMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
 
 // Sets default values
-APlayerCharacter::APlayerCharacter()
+APlayerCharacter::APlayerCharacter(const FObjectInitializer& ObjectInitializer)
+	:Super(ObjectInitializer.SetDefaultSubobjectClass<UCustomMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	// Enable crouching
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+	CustomMovementComponent = Cast<UCustomMovementComponent>(GetCharacterMovement());
 
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -151,6 +154,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Interact
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
+
+		// Climb
+		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &APlayerCharacter::OnClimbActionStarted);
 	}
 }
 
@@ -260,6 +266,11 @@ void APlayerCharacter::StartSprint()
 void APlayerCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+}
+
+void APlayerCharacter::OnClimbActionStarted(const FInputActionValue& Value)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Climb Action Started"));
 }
 
 float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)

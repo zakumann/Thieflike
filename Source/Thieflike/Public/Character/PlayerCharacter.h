@@ -21,15 +21,16 @@ class UInputMappingContext;
 class UInputAction;
 class UInputComponent;
 
+class UCustomMovementComponent;
 
-UCLASS()
+UCLASS(config=Game)
 class THIEFLIKE_API APlayerCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
 public:
 	// Sets default values for this character's properties
-	APlayerCharacter();
+	APlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	// Called when the game starts or when spawned
@@ -45,6 +46,10 @@ protected:
 	// Look Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* LookAction;
+
+	// Look Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* ClimbAction;
 
 	// Jump Input Actions
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
@@ -92,7 +97,7 @@ public:
 	void StopLeanLeft(const FInputActionValue& Value);
 	void StartSprint();
 	void StopSprint();
-
+	void OnClimbActionStarted(const FInputActionValue& Value);
 	//---- Interact ----//
 	void Interact();
 
@@ -174,6 +179,9 @@ public:
 	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
 	USkeletalMeshComponent* FirstPersonMeshComponent;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Movement)
+	UCustomMovementComponent* CustomMovementComponent;
+
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 
@@ -183,4 +191,6 @@ private:
 
 	// Store the original camera relative location
 	FVector DefaultSpringArmLocation;
+public:
+	FORCEINLINE UCustomMovementComponent* GetCustomMovementComponent() const { return CustomMovementComponent; }
 };
