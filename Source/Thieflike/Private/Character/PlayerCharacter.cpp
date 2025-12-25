@@ -270,7 +270,16 @@ void APlayerCharacter::StopSprint()
 
 void APlayerCharacter::OnClimbActionStarted(const FInputActionValue& Value)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Climb Action Started"));
+	if (!CustomMovementComponent) return;
+
+	if (!CustomMovementComponent->IsClimbing())
+	{
+		CustomMovementComponent->ToggleClimbing(true);
+	}
+	else
+	{
+		CustomMovementComponent->ToggleClimbing(false);
+	}
 }
 
 float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
