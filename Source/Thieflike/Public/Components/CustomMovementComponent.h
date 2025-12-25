@@ -13,9 +13,12 @@ UCLASS()
 class THIEFLIKE_API UCustomMovementComponent : public UCharacterMovementComponent
 {
 	GENERATED_BODY()
+
 public:
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
 private:
+
 #pragma region ClimbTraces
 
 	TArray<FHitResult> DoCapsuleTraceMultiByObject(const FVector& Start, const FVector& End, bool bShowDebugShape = false);
