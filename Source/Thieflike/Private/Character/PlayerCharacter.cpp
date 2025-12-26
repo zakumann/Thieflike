@@ -2,25 +2,22 @@
 
 
 #include "Character/PlayerCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h" // For TActorIterator
 #include "Engine/DirectionalLight.h" // To easily find the main light source
 #include "Components/PointLightComponent.h" // For point lights
 #include "Components/SpotLightComponent.h" // For spot lights
-#include "Components/CustomMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
 
 // Sets default values
-APlayerCharacter::APlayerCharacter(const FObjectInitializer& ObjectInitializer)
-	:Super(ObjectInitializer.SetDefaultSubobjectClass<UCustomMovementComponent>(ACharacter::CharacterMovementComponentName))
+APlayerCharacter::APlayerCharacter()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	// Enable crouching
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-
-	CustomMovementComponent = Cast<UCustomMovementComponent>(GetCharacterMovement());
 
 	// Initialize TargetCapsuleHalfHeight to current standing height
 	TargetCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -62,7 +59,7 @@ APlayerCharacter::APlayerCharacter(const FObjectInitializer& ObjectInitializer)
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	check(GEngine != nullptr);
 
 	// Get the player controller for this character
@@ -117,7 +114,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// Smooth camera height
 	FVector CameraLocation = FirstPersonSpringArmComponent->GetRelativeLocation();
-	CameraLocation.Z = FMath::FInterpTo(CameraLocation.Z, TargetCapsuleHalfHeight, DeltaTime,CrouchTransitionSpeed);
+	CameraLocation.Z = FMath::FInterpTo(CameraLocation.Z, TargetCapsuleHalfHeight, DeltaTime, CrouchTransitionSpeed);
 	FirstPersonSpringArmComponent->SetRelativeLocation(CameraLocation);
 }
 
@@ -154,9 +151,6 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Interact
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
-
-		// Climb
-		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &APlayerCharacter::OnClimbActionStarted);
 	}
 }
 
@@ -268,20 +262,6 @@ void APlayerCharacter::StopSprint()
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
 
-void APlayerCharacter::OnClimbActionStarted(const FInputActionValue& Value)
-{
-	if (!CustomMovementComponent) return;
-
-	if (!CustomMovementComponent->IsClimbing())
-	{
-		CustomMovementComponent->ToggleClimbing(true);
-	}
-	else
-	{
-		CustomMovementComponent->ToggleClimbing(false);
-	}
-}
-
 float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
 {
 	if (!GetWorld()) return DesiredLean;
@@ -369,4 +349,3 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 		TargetLeanRoll = 0.0f;
 	}
 }
-
