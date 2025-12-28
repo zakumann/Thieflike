@@ -92,6 +92,14 @@ public:
 	void StopLeanLeft(const FInputActionValue& Value);
 	void StartSprint();
 	void StopSprint();
+	void StopMantle(bool bSuccess);
+
+	// ---- Mantle ---- //
+	bool CanMantle(FVector& OutMantleTargetLocation);
+
+	// Safety: Previous location to check if we are stuck in mantle
+	FVector LastMantleLocation;
+	float StuckTimer = 0.0f;
 
 	//---- Interact ----//
 	void Interact();
@@ -176,6 +184,30 @@ public:
 
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+
+public:
+	// ---- Mantle Vaariables & Functions ---- //
+	// Maximum distance in front of the player to check for mantleable obstacles
+	UPROPERTY(EditDefaultsOnly, Category= "Mantle")
+	float MaxFrontMantleCheckDistance = 40.f;
+
+	// Maximum height of an obstacle to mantle over
+	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
+	float MaxMantleReachHeight = 100.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
+	float MantleSpeed = 10.0f;
+
+	bool bIsMantling = false;
+
+	// Track if the player is holding the jump button
+	bool bIsJumpHeld = false;
+
+	// Where we are moving the player to
+	FVector MantleTargetPosition;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
+	float MantleJumpHeightTolerance = 15.0f;
 
 private:
 	// Variable to track the target height for smooth transition
