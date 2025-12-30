@@ -257,26 +257,32 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 
 void APlayerCharacter::Jump()
 {
-	// 1. Cannot mantle if we are already in the air(Jump state)
-	bool bIsGrounded = GetCharacterMovement()->IsMovingOnGround();
+	// If crouching, stand up first so mantle checks use standing height
+	if (GetCharacterMovement() && GetCharacterMovement()->IsCrouching())
+	{
+		UnCrouch();
+		return;
+	}
 
+	// 1. Cannot mantle if we are already in the air(Jump state)
+	bool bIsGrounded = GetCharacterMovement() ? GetCharacterMovement()->IsMovingOnGround() : false;
 	FVector TargetLocation;
 
-	// 2. Check for Mantle Opportunity
+	// Check for Mantle Opportunity
 	if (bIsGrounded && CanMantle(TargetLocation))
 	{
 		bIsMantling = true;
 		MantleTargetPosition = TargetLocation;
 		bIsJumpHeld = true;
 
-		// Initialize Safety Variables
 		LastMantleLocation = GetActorLocation();
 		StuckTimer = 0.0f;
 
 		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 		return;
 	}
-	// If we are in the air or no wall was found -> Standard Jump
+
+	// Fallback to regular jump
 	Super::Jump();
 }
 
@@ -286,6 +292,8 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 	if (GetCharacterMovement()->IsCrouching())
 	{
 		UnCrouch();
+		// If mantling 
+
 	}
 	else
 	{
@@ -494,6 +502,11 @@ void APlayerCharacter::CalculateVisibility()
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+
+	if (bIsMantling)
+	{
+		return;
+	}
 
 	// Set the target height for the Tick function to interpolate towards (e.g., 44.0f)
 	TargetCapsuleHalfHeight = 44.0f; // Half the original height of 88.0f
