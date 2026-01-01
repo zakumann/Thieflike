@@ -9,6 +9,7 @@
 #include "Components/SpotLightComponent.h" // For spot lights
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
+#include "Character/LightDetector.h" // LightDetector
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -479,24 +480,32 @@ float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
 // Calculate the player's visibility based on lighting conditions
 void APlayerCharacter::CalculateVisibility()
 {
-	// For simplicity, we'll set CurrentVisibility to a fixed value.
-	// In a real implementation, you would analyze the lighting conditions around the character.
-	CurrentVisibility = 50.0f; // Placeholder value
+	//Determine target visibility percentage (0 to 100)
+	float TargetVisibilityPercent = AmbientLightFactor * 100.0f;
 
-	// Set visibility based on exposure threshold
-	if (CurrentVisibility >= VisibilityThreshold * 100.0f)
+	if (LightDetectorActor)
 	{
-		// Player is visible
-		// You can add logic here to notify AI or trigger events
-		APlayerCharacter::CurrentVisibility = 100.0f;
+		//LightDetector returns brightness (0 ~ 255). regularitise 0 ~ 1.
+		float Brightness = LightDetectorActor->CalculateBrightness();
+		float Normalized = FMath::Clamp(Brightness / 255.0f, 0.0f, 1.0f);
+
+		// AmbientLightFactor Normlized - If Normalized is 0 then being Ambient, otherwise, 1 being exposure
+		float Exposure = FMath::Lerp(AmbientLightFactor, 1.0f, Normalized);
+		TargetVisibilityPercent = Exposure * 100.0f;
+	}
+
+	// Smoothly
+	if (GetWorld())
+	{
+		CurrentVisibility = FMath::FInterpTo(CurrentVisibility, TargetVisibilityPercent, GetWorld()->GetDeltaSeconds(), VisibilityInterpSpeed);
 	}
 	else
 	{
-		// Player is hidden
-		// You can add logic here for stealth mechanics
-		APlayerCharacter::CurrentVisibility = 0.0f;
+		CurrentVisibility = TargetVisibilityPercent;
 	}
 
+	// limited safety
+	CurrentVisibility = FMath::Clamp(CurrentVisibility, 0.0f, 100.0f);
 }
 
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)

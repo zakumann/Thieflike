@@ -20,7 +20,7 @@
 class UInputMappingContext;
 class UInputAction;
 class UInputComponent;
-
+class ALightDetector;
 
 UCLASS()
 class THIEFLIKE_API APlayerCharacter : public ACharacter
@@ -154,6 +154,10 @@ public:
 	// A factor to simulate ambient light when not directly in a bright spot
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
 	float AmbientLightFactor = 0.1f; // Represents 10% ambient light when completely hidden from direct light
+
+	// Reference to LightDetector actor (assign in editor)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
+	ALightDetector* LightDetectorActor;
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
