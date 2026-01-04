@@ -35,6 +35,8 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	virtual void Landed(const FHitResult& Hit) override;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputMappingContext* FirstPersonContext;
 
@@ -95,6 +97,8 @@ public:
 	void StopMantle(bool bSuccess);
 
 	// ---- Mantle ---- //
+	void PerformMantle();
+	void CompleteMantleSequence();
 	bool CanMantle(FVector& OutMantleTargetLocation);
 
 	// Safety: Previous location to check if we are stuck in mantle
@@ -193,25 +197,32 @@ public:
 	// ---- Mantle Vaariables & Functions ---- //
 	// Maximum distance in front of the player to check for mantleable obstacles
 	UPROPERTY(EditDefaultsOnly, Category= "Mantle")
-	float MaxFrontMantleCheckDistance = 40.f;
+	float InitialTraceLength;
 
 	// Maximum height of an obstacle to mantle over
 	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	float MaxMantleReachHeight = 100.0f;
+	float SecondaryTraceZOffset;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	float MantleSpeed = 10.0f;
+	float FallingHeightMultiplier;
 
-	bool bIsMantling = false;
+	bool bCanMantle;
 
-	// Track if the player is holding the jump button
-	bool bIsJumpHeld = false;
-
-	// Where we are moving the player to
-	FVector MantleTargetPosition;
-
+	// Mantle positions for movement
 	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	float MantleJumpHeightTolerance = 15.0f;
+	FVector MantlePos1;
+	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
+	FVector MantlePos2;
+
+	// Mantle montage length
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
+	float MontageLength = 0.5f;
+
+	// Track if mantle has been used in current jump/fall
+	bool bHasMantledThisJump = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
+	float MaxMantleHeight = 250.0f;
 
 private:
 	// Variable to track the target height for smooth transition
@@ -219,4 +230,7 @@ private:
 
 	// Store the original camera relative location
 	FVector DefaultSpringArmLocation;
+
+	// Mantle timer handle
+	FTimerHandle MantleTimerHandle;
 };

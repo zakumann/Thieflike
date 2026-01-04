@@ -118,72 +118,25 @@ void APlayerCharacter::Tick(float DeltaTime)
 	CameraLocation.Z = FMath::FInterpTo(CameraLocation.Z, TargetCapsuleHalfHeight, DeltaTime, CrouchTransitionSpeed);
 	FirstPersonSpringArmComponent->SetRelativeLocation(CameraLocation);
 
-	// ---- Handle Mantling ---- //
-	if (bIsMantling)
+	if (GetCharacterMovement()->MovementMode == MOVE_Flying && MantleTimerHandle.IsValid())
 	{
-		FVector CurrentLocation = GetActorLocation();
-
-		// --- Stuck Check
-		// If we haven't moved significantly since last frame, we might be stuck in geometry
-		if (FVector::DistSquared(CurrentLocation, LastMantleLocation) < 50.0f)
+		FVector CurrentLoc = GetActorLocation();
+		// if final position and current position is same(can't moveable)
+		if (FVector::DistSquared(CurrentLoc, LastMantleLocation) < 5.0f)
 		{
 			StuckTimer += DeltaTime;
-			if (StuckTimer > 0.4f)
+			// if stuck more than 0.2 seconds
+			if (StuckTimer > 0.2f)
 			{
-				StopMantle(false);
-				return;
+				StopMantle(false); //failed.
 			}
 		}
 		else
 		{
-			//Reset timer if we have moved
 			StuckTimer = 0.0f;
 		}
-		LastMantleLocation = CurrentLocation;
-		//---
-		bool bReachedHeight = FMath::IsNearlyEqual(CurrentLocation.Z, MantleTargetPosition.Z, 5.0f);
-
-		if (!bReachedHeight)
-		{
-			// PHASE 1: VERTICAL HOIST
-
-			// Check Input
-			if (!bIsJumpHeld)
-			{
-				StopMantle(false); // Fail -> Push Back
-				return;
-			}
-
-			FVector NewLoc = CurrentLocation;
-			NewLoc.Z = FMath::FInterpTo(CurrentLocation.Z, MantleTargetPosition.Z, DeltaTime, MantleSpeed);
-
-			// FIX: Pull slightly AWAY from the wall while going up
-			// This prevents catching your capsule on the "lip" of the ledge
-			FVector SafeWallLocation = MantleTargetPosition - (GetActorForwardVector() * 25.0f); // Stay 25 units back from target X/Y
-			NewLoc.X = FMath::FInterpTo(CurrentLocation.X, SafeWallLocation.X, DeltaTime, MantleSpeed * 0.5f);
-			NewLoc.Y = FMath::FInterpTo(CurrentLocation.Y, SafeWallLocation.Y, DeltaTime, MantleSpeed * 0.5f);
-
-			SetActorLocation(NewLoc);
-		}
-		else
-		{
-			// PHASE 2: FORWARD STEP
-			FVector NewLoc = CurrentLocation;
-			NewLoc.Z = MantleTargetPosition.Z;
-			NewLoc.X = FMath::FInterpTo(CurrentLocation.X, MantleTargetPosition.X, DeltaTime, MantleSpeed);
-			NewLoc.Y = FMath::FInterpTo(CurrentLocation.Y, MantleTargetPosition.Y, DeltaTime, MantleSpeed);
-
-			SetActorLocation(NewLoc);
-
-			if (FVector::Dist2D(NewLoc, MantleTargetPosition) < 10.0f)
-			{
-				StopMantle(true); // Success -> Walking Mode
-			}
-		}
-		return;
+		LastMantleLocation = CurrentLoc;
 	}
-
-	Super::Tick(DeltaTime);
 }
 
 // Called to bind functionality to input
@@ -226,9 +179,6 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	// 2D Vector of movement values returned from the input action
 	const FVector2D MovementValue = Value.Get<FVector2D>();
 
-	// Prevent movement while climbing
-	if (bIsMantling) return;
-
 	// Check if the controller posessing this Actor is valid
 	if (Controller)
 	{
@@ -265,27 +215,32 @@ void APlayerCharacter::Jump()
 		return;
 	}
 
-	// 1. Cannot mantle if we are already in the air(Jump state)
-	bool bIsGrounded = GetCharacterMovement() ? GetCharacterMovement()->IsMovingOnGround() : false;
+	// Can mantle we are in the air (Jump state)
 	FVector TargetLocation;
 
 	// Check for Mantle Opportunity
-	if (bIsGrounded && CanMantle(TargetLocation))
+	if (!bHasMantledThisJump && CanMantle(TargetLocation))
 	{
-		bIsMantling = true;
-		MantleTargetPosition = TargetLocation;
-		bIsJumpHeld = true;
-
-		LastMantleLocation = GetActorLocation();
-		StuckTimer = 0.0f;
-
-		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+		// Mantle trace successful
+		bHasMantledThisJump = true; // Mark that we've used our mantle for this jump
+		PerformMantle();
 		return;
 	}
-
 	// Fallback to regular jump
 	Super::Jump();
 }
+
+void APlayerCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	// if Landed
+	bHasMantledThisJump = false;
+
+	// Reset Timer if falling while Mantle
+	GetWorld()->GetTimerManager().ClearTimer(MantleTimerHandle);
+}
+
 
 void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 {
@@ -362,8 +317,15 @@ void APlayerCharacter::StopSprint()
 
 void APlayerCharacter::StopMantle(bool bSuccess)
 {
-	bIsMantling = false;
-	bIsJumpHeld = false;
+	GetWorld()->GetTimerManager().ClearTimer(MantleTimerHandle);
+
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->GravityScale = 1.0f;
+		GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	}
+
+	SetActorEnableCollision(true);
 
 	if (bSuccess)
 	{
@@ -374,80 +336,12 @@ void APlayerCharacter::StopMantle(bool bSuccess)
 		//Failed or Cancelled: Push back slightly!
 		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 
-		// Nudge the player backwards(negatie Forward Vector)
-		// bSweep = true ensures we don't push through a wall behind us
-		FVector PushBack = -GetActorForwardVector() * 100.0f;
-		AddActorWorldOffset(PushBack, true);
-
-		// Optional: Add a tiny velocity impulse to ensure they fall away
-		GetCharacterMovement()->Velocity += PushBack * 1.5f;
+		FVector NudgeBack = -GetActorForwardVector() * 5.0f;
+		AddActorWorldOffset(NudgeBack, true);
 	}
 }
 
-// -------- Mantling --------
-bool APlayerCharacter::CanMantle(FVector& OutMantleTargetLocation)
-{
-	if (!GetCharacterMovement()) return false;
 
-	// Capsule info
-	const float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-
-	// --- 1. Calculate Max Jump Height
-	const float JumpZ = GetCharacterMovement()->JumpZVelocity;
-	const float Gravity = GetCharacterMovement()->GetGravityZ() * -1.0f;
-
-	const float MaxJumpHeight = (JumpZ * JumpZ) / (2.0f * Gravity);
-
-	// ----2. Forward trace (find wall) ----//
-	FVector Start = GetActorLocation();
-	FVector Forward = GetActorForwardVector();
-
-	FVector End = Start + Forward * MaxFrontMantleCheckDistance;
-
-	FHitResult WallHit;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
-
-	bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, Start, End, ECC_WorldStatic, Params);
-
-	if (!bHitWall)
-	{
-		return false; // No wall to mantle
-	}
-
-	// --- 3. Downward trace to find ledge top ---- //
-	FVector LedgeTraceStart = WallHit.ImpactPoint + FVector(0.f, 0.f, MaxMantleReachHeight);
-	LedgeTraceStart.Z = Start.Z + CapsuleHalfHeight + MaxMantleReachHeight;
-
-	FVector LedgeTraceEnd = LedgeTraceStart;
-	LedgeTraceEnd.Z = Start.Z;
-
-	FHitResult LedgeHit;
-	bool bHitLedge = GetWorld()->LineTraceSingleByChannel(LedgeHit, LedgeTraceStart, LedgeTraceEnd, ECC_WorldStatic, Params);
-
-	if (!bHitLedge)
-	{
-		return false;
-	}
-
-	// --- 4. Check walkable surface ---- //
-	if (LedgeHit.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ())
-	{
-		return false; // Not a walkable surface
-	}
-
-	// 5. Height check
-	float LedgeHeightFromFeet = LedgeHit.ImpactPoint.Z - (Start.Z - CapsuleHalfHeight);
-
-	if (LedgeHeightFromFeet > MaxJumpHeight + MaxMantleReachHeight)
-	{
-		return false; // Ledge too high or too low
-	}
-
-	// 6. Valid mantle
-	OutMantleTargetLocation = LedgeHit.ImpactPoint + FVector(0.0f, 0.0f, CapsuleHalfHeight + 2.0f);
-	return true;
-}
 
 float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
 {
@@ -512,11 +406,6 @@ void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHei
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
 
-	if (bIsMantling)
-	{
-		return;
-	}
-
 	// Set the target height for the Tick function to interpolate towards (e.g., 44.0f)
 	TargetCapsuleHalfHeight = 44.0f; // Half the original height of 88.0f
 
@@ -548,4 +437,217 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 		TargetLeanOffset = 0.0f;
 		TargetLeanRoll = 0.0f;
 	}
+}
+
+void APlayerCharacter::PerformMantle()
+{
+	if (!GetCharacterMovement())
+	{
+		return;
+	}
+
+	// Set movement mode to flying during mantle
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	GetCharacterMovement()->GravityScale = 0.0f; // Disable gravity during mantle
+
+	// Store last mantle location for safety checks
+	LastMantleLocation = GetActorLocation();
+	StuckTimer = 0.0f;
+
+	// Calculate movement for Phase 1: Move to MantlePos1 (up and slightly back)
+	FVector CurrentPos = GetActorLocation();
+	FVector ToPos1 = MantlePos1 - CurrentPos;
+	float Phase1Distance = ToPos1.Length();
+	float Phase1Duration = MontageLength * 0.4f;
+
+	FVector Phase1Velocity = (Phase1Distance > 0.0f) ? (ToPos1 / Phase1Duration) : FVector::ZeroVector;
+	GetCharacterMovement()->Velocity = Phase1Velocity;
+
+	// Draw debug line for movement direction
+	DrawDebugLine(
+		GetWorld(),
+		CurrentPos,
+		MantlePos1,
+		FColor::Yellow,
+		false,
+		Phase1Duration,
+		0,
+		2.0f
+	);
+
+	// Schedule Phase 2: Move to MantlePos2 (continue forward and maintain height)
+	GetWorld()->GetTimerManager().SetTimer(
+		MantleTimerHandle,
+		[this]()
+		{
+			if (!GetCharacterMovement() || !bCanMantle)
+			{
+				return;
+			}
+
+			FVector CurrentPos = GetActorLocation();
+			FVector ToPos2 = MantlePos2 - CurrentPos;
+			float Phase2Distance = ToPos2.Length();
+			float Phase2Duration = MontageLength * 0.6f;
+
+			FVector Phase2Velocity = (Phase2Distance > 0.0f) ? (ToPos2 / Phase2Duration) : FVector::ZeroVector;
+			GetCharacterMovement()->Velocity = Phase2Velocity;
+
+			// Draw debug line for Phase 2 movement
+			DrawDebugLine(
+				GetWorld(),
+				CurrentPos,
+				MantlePos2,
+				FColor::Green,
+				false,
+				Phase2Duration,
+				0,
+				2.0f
+			);
+
+			// Complete mantle sequence after Phase 2
+			GetWorld()->GetTimerManager().SetTimer(
+				MantleTimerHandle,
+				[this]()
+				{
+					CompleteMantleSequence();
+				},
+				MontageLength * 0.6f,
+				false
+			);
+		},
+		Phase1Duration,
+		false
+	);
+}
+
+void APlayerCharacter::CompleteMantleSequence()
+{
+	if (!GetCharacterMovement())
+	{
+		return;
+	}
+
+	SetActorLocation(MantlePos2);
+
+	// Stop all movement
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+	// Re-enable gravity
+	GetCharacterMovement()->GravityScale = 1.0f;
+
+	// Re-enable collision after mantle
+	SetActorEnableCollision(true);
+
+	// Return to walking movement mode
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+
+	bCanMantle = false;
+
+	bHasMantledThisJump = false;
+}
+
+// -------- Mantling --------
+bool APlayerCharacter::CanMantle(FVector& OutMantleTargetLocation)
+{
+	if (!GetCharacterMovement() || !GetWorld()) return false;
+
+	// if do Mantle already while jump/falling
+	if (bHasMantledThisJump)
+	{
+		return false;
+	}
+
+	// --- SETUP: Get Player Dimensions ---
+	float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	float FullHeight = CapsuleHalfHeight * 2.0f;
+	FVector PlayerLoc = GetActorLocation();
+	FVector FeetLoc = PlayerLoc - FVector(0, 0, CapsuleHalfHeight);
+	FVector Forward = GetActorForwardVector();
+
+	// 1. TRACE FORWARD (Find the Wall)
+	FVector WallTraceStart = PlayerLoc;
+	FVector WallTraceEnd = WallTraceStart + (Forward * InitialTraceLength); // Uses your InitialTraceLength
+
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	FHitResult WallHit;
+	// Trace against WorldStatic (Walls)
+	bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, WallTraceStart, WallTraceEnd, ECC_WorldStatic, Params);
+
+	if (!bHitWall) return false;
+
+	// 2. DEFINE HEIGHT LIMIT (Thief Style: Height + 50.0f)
+	// We start the "Down Trace" exactly at this limit.
+	// If the wall is taller than this, the start point will be inside the wall, and the trace will fail.
+	float MaxReachZ = FeetLoc.Z + MaxMantleHeight;
+
+	// 3. TRACE DOWN (Find the Ledge Top)
+	// Move the trace slightly into the wall (15 units) + Up to the limit
+	FVector WallForwardDir = -WallHit.ImpactNormal; // Direction pointing into the wall
+	FVector LedgeTraceStart = WallHit.ImpactPoint + (WallForwardDir * 15.0f);
+	LedgeTraceStart.Z = MaxReachZ; // Strict height limit
+
+	FVector LedgeTraceEnd = LedgeTraceStart;
+	LedgeTraceEnd.Z = WallHit.ImpactPoint.Z; // Trace down to the wall impact height
+
+	FHitResult LedgeHit;
+	bool bHitLedge = GetWorld()->LineTraceSingleByChannel(LedgeHit, LedgeTraceStart, LedgeTraceEnd, ECC_WorldStatic, Params);
+
+	// [Debug] Visualize the Down Trace
+	DrawDebugLine(GetWorld(), LedgeTraceStart, LedgeTraceEnd, bHitLedge ? FColor::Green : FColor::Red, false, 2.0f, 0, 1.0f);
+
+	if (bHitLedge)
+	{
+		if (LedgeHit.bStartPenetrating)
+		{
+			return false;
+		}
+		// 4. VALIDATE SURFACE
+		// Is the surface flat enough to stand on?
+		if (LedgeHit.ImpactPoint.Z < GetCharacterMovement()->GetWalkableFloorZ())
+		{
+			return false;
+		}
+		// ====================================================
+		// [Add] 4-A. HEIGHT CHECK
+		// ====================================================
+		float LedgeZ = LedgeHit.ImpactPoint.Z;
+		float FeetZ = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+		// Ledge height - Feet height = Climb Height
+		float ClimbHeight = LedgeZ - FeetZ;
+
+		UE_LOG(LogTemp, Log, TEXT("Climb Height: %f / Max: %f"), ClimbHeight, MaxMantleHeight);
+
+		// If ClimbHeight is higher than MaxMantleHeight failed
+		if (LedgeHit.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ())
+        {
+            return false;
+        }
+
+		// 5. CALCULATE TARGET POSITIONS
+		FVector LedgeTop = LedgeHit.ImpactPoint;
+
+		// MantlePos2 (Final Landing Spot): On top of the ledge, slightly forward from the edge
+		// We add CapsuleHalfHeight to Z so the feet land on the surface
+		MantlePos2 = LedgeTop + FVector(0, 0, CapsuleHalfHeight + 2.0f) + (Forward * 20.0f);
+
+		// MantlePos1 (Climb Phase): Just below the edge, ready to hoist
+		// Offset slightly back from the ledge edge and down
+		MantlePos1 = LedgeTop + (WallHit.ImpactNormal * 30.0f) + FVector(0, 0, -10.0f);
+
+		OutMantleTargetLocation = MantlePos2;
+		bCanMantle = true;
+
+		// [Debug] Draw Spheres
+		DrawDebugSphere(GetWorld(), MantlePos1, 10.0f, 12, FColor::Cyan, false, 2.0f);
+		DrawDebugSphere(GetWorld(), MantlePos2, 10.0f, 12, FColor::Magenta, false, 2.0f);
+
+		return true;
+	}
+
+	bCanMantle = false;
+	return false;
 }
