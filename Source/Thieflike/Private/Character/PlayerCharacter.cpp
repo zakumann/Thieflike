@@ -9,6 +9,7 @@
 #include "Components/SpotLightComponent.h" // For spot lights
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
+#include "Object/Crate.h"
 #include "Character/LightDetector.h" // LightDetector
 
 // Sets default values
@@ -295,13 +296,21 @@ void APlayerCharacter::Interact()
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 
-	GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECollisionChannel::ECC_Visibility, Params);
-
-	ADoor* Door = Cast<ADoor>(HitResult.GetActor());
-	if (Door)
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECollisionChannel::ECC_Visibility, Params))
 	{
-		FVector PlayerForward = GetActorForwardVector();
-		Door->OnInteract(PlayerForward);
+		AActor* HitActor = HitResult.GetActor();
+
+		// 1. Door
+		if (ADoor* Door = Cast<ADoor>(HitActor))
+		{
+			Door->OnInteract(GetActorForwardVector());
+		}
+
+		// 2. Crate
+		else if (ACrate* Crate = Cast<ACrate>(HitActor))
+		{
+			Crate->OnInteract();
+		}
 	}
 }
 
