@@ -10,6 +10,7 @@
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
 #include "Object/Crate.h"
+#include "Object/LootItem.h"
 #include "Character/LightDetector.h" // LightDetector
 
 // Sets default values
@@ -156,6 +157,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Bind Jump Actions
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::Jump);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Ongoing, this, &APlayerCharacter::WhileJumping);
 
 		// Lean
 		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Started, this, &APlayerCharacter::StartLeanRight);
@@ -229,6 +231,16 @@ void APlayerCharacter::Jump()
 	}
 	// Fallback to regular jump
 	Super::Jump();
+}
+
+void APlayerCharacter::WhileJumping()
+{
+	if (!bCanMantle)
+	{
+		return;
+	}
+
+	PerformMantle();
 }
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
@@ -310,6 +322,13 @@ void APlayerCharacter::Interact()
 		else if (ACrate* Crate = Cast<ACrate>(HitActor))
 		{
 			Crate->OnInteract();
+		}
+
+		// 3. Loot Item
+		else if (ALootItem* Loot = Cast<ALootItem>(HitActor))
+		{
+			// We pass 'this' (the player) so the item knows who to give money to
+			Loot->OnInteract(this);
 		}
 	}
 }
@@ -448,6 +467,12 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	}
 }
 
+void APlayerCharacter::AddMoney(int32 Amount)
+{
+	CurrentMoney += Amount;
+	UE_LOG(LogTemp, Warning, TEXT("Picked Up loot! Current Money: %d"), CurrentMoney);
+}
+
 void APlayerCharacter::PerformMantle()
 {
 	if (!GetCharacterMovement())
@@ -494,7 +519,7 @@ void APlayerCharacter::PerformMantle()
 				return;
 			}
 
-			FVector CurrentPos = GetActorLocation();
+			FVector CurrentPos = GetActorLocation() + 5.0f;
 			FVector ToPos2 = MantlePos2 - CurrentPos;
 			float Phase2Distance = ToPos2.Length();
 			float Phase2Duration = MontageLength * 0.6f;

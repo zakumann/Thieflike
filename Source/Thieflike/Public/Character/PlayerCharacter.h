@@ -86,6 +86,7 @@ public:
 	void Look(const FInputActionValue& Value);
 
 	void Jump();
+	void WhileJumping();
 
 	void StartCrouch(const FInputActionValue& Value);
 	void StartLeanRight(const FInputActionValue& Value);
@@ -233,4 +234,11 @@ private:
 
 	// Mantle timer handle
 	FTimerHandle MantleTimerHandle;
+public:
+	// --- Inventory / Economy ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	int32 CurrentMoney = 0;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void AddMoney(int32 Amount);
 };
