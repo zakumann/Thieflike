@@ -198,14 +198,11 @@ public:
 	// ---- Mantle Vaariables & Functions ---- //
 	// Maximum distance in front of the player to check for mantleable obstacles
 	UPROPERTY(EditDefaultsOnly, Category= "Mantle")
-	float InitialTraceLength;
+	float InitialTraceLength = 80.0;
 
 	// Maximum height of an obstacle to mantle over
 	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
 	float SecondaryTraceZOffset;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	float FallingHeightMultiplier;
 
 	bool bCanMantle;
 
@@ -217,13 +214,13 @@ public:
 
 	// Mantle montage length
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
-	float MontageLength = 0.5f;
+	float MontageLength = 0.8f;
 
 	// Track if mantle has been used in current jump/fall
 	bool bHasMantledThisJump = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
-	float MaxMantleHeight = 250.0f;
+	float MaxMantleHeight = 200.0f;
 
 private:
 	// Variable to track the target height for smooth transition
