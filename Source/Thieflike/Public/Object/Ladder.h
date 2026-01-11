@@ -15,12 +15,42 @@ public:
 	// Sets default values for this actor's properties
 	ALadder();
 
-protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
+	class USceneComponent* DefaultSceneRoot;
 
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
+	class UStaticMeshComponent* LadderBase;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder | Customize")
+	class UStaticMesh* TopLadderMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder | Customize")
+	class UStaticMesh* MidLadderMesh;
+
+	UPROPERTY(EditAnywhere, Category = "Ladder | Customize",
+		meta = (EditCondition="TopLadderMesh != nullptr && MidLadderMesh != nullptr", ClampMin="0", ClampMax="50"))
+	int MidPartCount;
+
+	UPROPERTY(EditAnywhere, Category = "Ladder | Customize", meta = (ClampMin="0", ClampMax="100"))
+	float TopOffset = 20.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
+	class UInstancedStaticMeshComponent* MiddleParts;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
+	class UBoxComponent* BoxCollision;
+
+	/** Get the ladder's collision box for climbing bounds */
+	UFUNCTION(BlueprintCallable, Category = "Ladder")
+	UBoxComponent* GetBoxCollision() const { return BoxCollision; }
+
+	/** Get ladder's minimum Z positio (bottom) */
+	UFUNCTION(BlueprintCallable, Category = "Ladder")
+	float GetLadderMinZ() const;
+
+	/** Get ladder's maximum Z positino (top where Ladderbase ends) */
+	UFUNCTION(BlueprintCallable, Category = "Ladder")
+	float GetLadderMaxZ() const;
+
+	virtual void OnConstruction(const FTransform& Transform) override;
 };

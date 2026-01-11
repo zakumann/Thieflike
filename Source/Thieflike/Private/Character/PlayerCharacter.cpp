@@ -7,10 +7,12 @@
 #include "Engine/DirectionalLight.h" // To easily find the main light source
 #include "Components/PointLightComponent.h" // For point lights
 #include "Components/SpotLightComponent.h" // For spot lights
+#include "Components/BoxComponent.h" 
 #include "Kismet/KismetSystemLibrary.h" // For UKismetSystemLibrary::LineTraceSingleByChannel 
 #include "Object/Door.h"
 #include "Object/Crate.h"
 #include "Object/LootItem.h"
+#include "Object/Ladder.h"
 #include "Character/LightDetector.h" // LightDetector
 
 // Sets default values
@@ -87,6 +89,11 @@ void APlayerCharacter::Tick(float DeltaTime)
 	if (!FirstPersonSpringArmComponent && !FirstPersonCameraComponent)
 	{
 		return;
+	}
+
+	if (bIsClimbingLadder)
+	{
+		UpdateLadderMovement(DeltaTime);
 	}
 
 	float AllowedLean = GetAllowedLeanOffset(TargetLeanOffset); //GetAllowedLeanOffset is for Lean to the Playercharacter FirstPersonSpringArmComponent.
@@ -178,9 +185,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 }
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
-
 	// 2D Vector of movement values returned from the input action
 	const FVector2D MovementValue = Value.Get<FVector2D>();
+	LastMovementInput = MovementValue;
+
+	if (bIsClimbingLadder)
+	{
+		return; // Don't process normal walking movement
+	}
 
 	// Check if the controller posessing this Actor is valid
 	if (Controller)
@@ -330,6 +342,25 @@ void APlayerCharacter::Interact()
 			// We pass 'this' (the player) so the item knows who to give money to
 			Loot->OnInteract(this);
 		}
+
+		// 4. Ladder
+		if (ALadder* Ladder = Cast<ALadder>(HitActor))
+		{
+			if (bIsClimbingLadder)
+			{
+				StopClimbLadder();
+			}
+			else
+			{
+				StartClimbLadder(Ladder);
+			}
+			return;
+		}
+	}
+
+	else if (bIsClimbingLadder)
+	{
+		StopClimbLadder();
 	}
 }
 
@@ -467,6 +498,206 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	}
 }
 
+void APlayerCharacter::StartClimbLadder(ALadder* Ladder)
+{
+	if (!Ladder || bIsClimbingLadder)
+	{
+		return;
+	}
+
+	CurrentLadder = Ladder;
+	bIsClimbingLadder = true;
+
+
+	// Disable normal walking/falling
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	// Stop current movement
+	GetCharacterMovement()->StopMovementImmediately();
+
+	UBoxComponent* BoxCollision = Ladder->BoxCollision;
+	FVector LadderCenter = BoxCollision->GetComponentLocation();
+	FVector PlayerLocation = GetActorLocation();
+
+	// Target Location: Ladder's X/Y, Player's Z
+	FVector TargetLoc = FVector(LadderCenter.X, LadderCenter.Y, PlayerLocation.Z);
+
+	// Offset slightly forward from the ladder so we don't clip inside the mesh
+	FVector ForwardOffset = Ladder->GetActorForwardVector() * 40.0f;
+	TargetLoc += ForwardOffset;
+
+	SetActorLocation(TargetLoc);
+
+	// 3. Snap Rotation (Face the ladder)
+	FRotator TargetRot = Ladder->GetActorRotation();
+	TargetRot.Yaw += 180.0f; // Face the ladder
+	SetActorRotation(TargetRot);
+
+	// --- Set Ladder Max and Min
+	float LadderMinZ = Ladder->GetLadderMinZ();
+	float LadderMaxZ = Ladder->GetLadderMaxZ();
+	LadderTargetZ = FMath::Clamp(GetActorLocation().Z, LadderMinZ, LadderMaxZ);
+
+	UE_LOG(LogTemp, Warning, TEXT("Started climbing ladder at Z: %f (Min: %f, Max: %f)"), LadderTargetZ, LadderMinZ, LadderMaxZ);
+}
+
+void APlayerCharacter::StopClimbLadder()
+{
+	if (!bIsClimbingLadder)
+	{
+		return;
+	}
+
+	bIsClimbingLadder = false;
+	CurrentLadder = nullptr;
+
+	// Return to normal movement
+	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+
+	/*const float JumpOffForce = 300.0f;
+	FVector BackwardDirection = -GetActorForwardVector();
+
+	LaunchCharacter(BackwardDirection * JumpOffForce, true, true);*/
+
+	UE_LOG(LogTemp, Warning, TEXT("Stopped climbing ladder"));
+}
+
+void APlayerCharacter::UpdateLadderMovement(float DeltaTime)
+{
+	if (!CurrentLadder || !GetCharacterMovement())
+	{
+		StopClimbLadder();
+		return;
+	}
+
+	FVector PlayerLocation = GetActorLocation();
+	UBoxComponent* BoxCollision = CurrentLadder->BoxCollision;
+	FVector LadderLocation = BoxCollision->GetComponentLocation();
+	FVector BoxExtent = BoxCollision->GetScaledBoxExtent();
+
+	// --- Ladder : Min and Max ---
+	float LadderMinZ = CurrentLadder->GetLadderMinZ();
+	float LadderMaxZ = CurrentLadder->GetLadderMaxZ();
+
+	// ---- Check if player is still within ladder bounds ----
+	float DistX = FMath::Abs(PlayerLocation.X - LadderLocation.X);
+	float DistY = FMath::Abs(PlayerLocation.Y - LadderLocation.Y);
+
+/*	// If player moves outside the box collision, stop climbing
+	if (DistX > BoxExtent.X || DistY > BoxExtent.Y)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Out of ladder bounds (X/Y)! Falling..."));
+		StopClimbLadder();
+		return;
+	}*/
+
+	// LstMovementInput.Y works into Move function(W/S)
+	float ClimbInput = LastMovementInput.Y;
+
+	if (FMath::Abs(ClimbInput) > 0.1f)
+	{
+		LadderTargetZ += ClimbInput * LadderClimbSpeed * DeltaTime;
+	}
+
+	// Clamp target Z within ladder bounds
+	LadderTargetZ = FMath::Clamp(LadderTargetZ, LadderMinZ, LadderMaxZ);
+
+	// Move player to stay aligned with ladder (within box bounds)
+	float ClampedX = FMath::Clamp(PlayerLocation.X, LadderLocation.X - BoxExtent.X, LadderLocation.X + BoxExtent.X);
+	float ClampedY = FMath::Clamp(PlayerLocation.Y, LadderLocation.Y - BoxExtent.Y, LadderLocation.Y + BoxExtent.Y);
+
+	FVector NewLocation = FVector(ClampedX, ClampedY, LadderTargetZ);
+
+	// Set movement velocity to reach target position
+	FVector DeltaPosition = NewLocation - PlayerLocation;
+
+	if (FVector::Dist(PlayerLocation, NewLocation) < 1.0f)
+	{
+		SetActorLocation(NewLocation);
+		GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	}
+	else
+	{
+		GetCharacterMovement()->Velocity = DeltaPosition / DeltaTime;
+	}
+
+	// Debug visualization
+	DrawDebugBox(
+		GetWorld(),
+		LadderLocation,
+		BoxExtent,
+		FColor::Green,
+		false,
+		0.0f,
+		1
+	);
+
+	// Debug visualisation
+	DrawDebugLine(
+		GetWorld(),
+		LadderLocation + FVector(-BoxExtent.X, 0, 0),
+		LadderLocation + FVector(BoxExtent.X, 0, 0),
+		FColor::Yellow,
+		false,
+		0.0f,
+		2
+	);
+
+	DrawDebugLine(
+		GetWorld(),
+		FVector(LadderLocation.X - BoxExtent.X, LadderLocation.Y, LadderMaxZ),
+		FVector(LadderLocation.X + BoxExtent.X, LadderLocation.Y, LadderMaxZ),
+		FColor::Cyan,
+		false,
+		0.0f,
+		2
+	);
+
+	// Draw current player position on ladder
+	DrawDebugSphere(
+		GetWorld(),
+		PlayerLocation,
+		10.0f,
+		12,
+		FColor::Red,
+		false,
+		0.0f,
+		1
+	);
+
+	// Check if player wants to exit the ladder (Jump or Interact)
+	APlayerController* PC = Cast<APlayerController>(Controller);
+	if (PC && (PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::E)))
+	{
+		// Exit ladder forward
+		FVector ExitDirection = GetActorForwardVector() * LadderExitDistance;
+		AddActorWorldOffset(ExitDirection);
+		StopClimbLadder();
+	}
+}
+
+
+FVector APlayerCharacter::GetNearestPointOnLadder(ALadder* Ladder) const
+{
+	if (!Ladder || !Ladder->BoxCollision)
+	{
+		return GetActorLocation();
+	}
+
+	// Get the ladder's box collision component
+	UBoxComponent* BoxCollision = Ladder->BoxCollision;
+	FVector LadderLocation = BoxCollision->GetComponentLocation();
+	FVector PlayerLocation = GetActorLocation();
+
+	// Clamp player position to ladder bounds
+	FVector BoxExtent = BoxCollision->GetScaledBoxExtent();
+
+	float ClampedX = FMath::Clamp(PlayerLocation.X, LadderLocation.X - BoxExtent.X, LadderLocation.X + BoxExtent.X);
+	float ClampedY = FMath::Clamp(PlayerLocation.Y, LadderLocation.Y - BoxExtent.Y, LadderLocation.Y + BoxExtent.Y);
+	float ClampedZ = FMath::Clamp(PlayerLocation.Z, LadderLocation.Z - BoxExtent.Z, LadderLocation.Z + BoxExtent.Z);
+
+	return FVector(ClampedX, ClampedY, ClampedZ);
+}
+
 void APlayerCharacter::AddMoney(int32 Amount)
 {
 	CurrentMoney += Amount;
@@ -483,6 +714,7 @@ void APlayerCharacter::PerformMantle()
 	// Set movement mode to flying during mantle
 	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.0f; // Disable gravity during mantle
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 
 	// Store last mantle location for safety checks
 	LastMantleLocation = GetActorLocation();

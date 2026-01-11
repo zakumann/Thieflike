@@ -21,6 +21,7 @@ class UInputMappingContext;
 class UInputAction;
 class UInputComponent;
 class ALightDetector;
+class ALadder;
 
 UCLASS()
 class THIEFLIKE_API APlayerCharacter : public ACharacter
@@ -222,6 +223,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
 	float MaxMantleHeight = 200.0f;
 
+	//---- Ladder Functions & Variables ----//
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Climbing")
+	float LadderClimbSpeed = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Climbing")
+	float LadderExitDistance = 30.0f;
+
+	// [Ladder System]
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Climbing")
+	bool bIsClimbingLadder = false;
+
+	/** Reference to the ladder currently being climbed */
+	UPROPERTY(VisibleAnywhere, Category = "Climbing")
+	ALadder* CurrentLadder;
+
+	/** Start climbing the ladder */
+	void StartClimbLadder(ALadder* Ladder);
+
+	/** Stop climbing the ladder */
+	void StopClimbLadder();
+
+	/** Handle ladder climbing movement */
+	void UpdateLadderMovement(float DeltaTime);
+
+	/** Get the nearest point on the ladder */
+	FVector GetNearestPointOnLadder(ALadder* Ladder) const;
+
 private:
 	// Variable to track the target height for smooth transition
 	float TargetCapsuleHalfHeight;
@@ -231,6 +259,9 @@ private:
 
 	// Mantle timer handle
 	FTimerHandle MantleTimerHandle;
+
+	/** Target height when climbing ladder */
+	float LadderTargetZ;
 public:
 	// --- Inventory / Economy ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
@@ -238,4 +269,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void AddMoney(int32 Amount);
+private:
+	FVector2D LastMovementInput = FVector2D::ZeroVector;
+
+public:
+	FVector2D GetInputVector() const
+	{
+		return LastMovementInput;
+	}
 };
