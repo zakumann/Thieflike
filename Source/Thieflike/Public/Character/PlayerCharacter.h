@@ -163,7 +163,7 @@ public:
 
 	// Reference to LightDetector actor (assign in editor)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
-	ALightDetector* LightDetectorActor;
+	ALightDetector* LightDetector;
 
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")

@@ -436,10 +436,10 @@ void APlayerCharacter::CalculateVisibility()
 	//Determine target visibility percentage (0 to 100)
 	float TargetVisibilityPercent = AmbientLightFactor * 100.0f;
 
-	if (LightDetectorActor)
+	if (LightDetector)
 	{
 		//LightDetector returns brightness (0 ~ 255). regularitise 0 ~ 1.
-		float Brightness = LightDetectorActor->CalculateBrightness();
+		float Brightness = LightDetector->CalculateBrightness();
 		float Normalized = FMath::Clamp(Brightness / 255.0f, 0.0f, 1.0f);
 
 		// AmbientLightFactor Normlized - If Normalized is 0 then being Ambient, otherwise, 1 being exposure

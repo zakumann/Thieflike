@@ -9,13 +9,53 @@ ALightDetector::ALightDetector()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	DefaultSceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DefaultSceneRoot"));
+	RootComponent = DefaultSceneRoot;
+
+	LightGem = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LightGem"));
+	LightGem->SetupAttachment(RootComponent);
+	LightGem->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LightGem->SetCastShadow(false);
+
+	SpringArm_Up = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm_Up"));
+	SpringArm_Up->SetupAttachment(LightGem);
+	SpringArm_Up->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+	SpringArm_Up->TargetArmLength = 75.0f;
+	SpringArm_Up->bDoCollisionTest = false;
+
+	CaptureComponent_Up = CreateDefaultSubobject< USceneCaptureComponent2D>(TEXT("Up"));
+	CaptureComponent_Up->SetupAttachment(SpringArm_Up);
+	CaptureComponent_Up->FOVAngle = 60.0f;
+	CaptureComponent_Up->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	CaptureComponent_Up->PostProcessBlendWeight = 1.0f;
+	CaptureComponent_Up->bCaptureEveryFrame = true;
+	CaptureComponent_Up->bCaptureOnMovement = true;
+
+	SpringArm_Bottom = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm_Bottom"));
+	SpringArm_Bottom->SetupAttachment(LightGem);
+	SpringArm_Bottom->SetRelativeRotation(FRotator(-90, 0.0f, 0.0f));
+	SpringArm_Bottom->TargetArmLength = 75.0f;
+	SpringArm_Bottom->bDoCollisionTest = false;
+
+	CaptureComponent_Bottom = CreateDefaultSubobject< USceneCaptureComponent2D>(TEXT("Bottom"));
+	CaptureComponent_Bottom->SetupAttachment(SpringArm_Bottom);
+	CaptureComponent_Bottom->FOVAngle = 60.0f;
+	CaptureComponent_Bottom->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	CaptureComponent_Bottom->PostProcessBlendWeight = 1.0f;
+	CaptureComponent_Bottom->bCaptureEveryFrame = true;
+	CaptureComponent_Bottom->bCaptureOnMovement = true;
+
 }
 
 // Called when the game starts or when spawned
 void ALightDetector::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	if (LightDetectionRenderTarget)
+	{
+		CaptureComponent_Up->TextureTarget = LightDetectionRenderTarget;
+	}
 }
 
 // Called every frame
@@ -26,7 +66,7 @@ void ALightDetector::Tick(float DeltaTime)
 }
 
 
-void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* detectorTexture)
+/*void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* detectorTexture)
 {
 	// Read the pixels from our RenderTexture and store the data into our colour array
 	// Note: ReadPixels is allegedly a very slow operation
@@ -50,12 +90,12 @@ void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* detectorTextur
 			brightnessOutput = currentPixelBrightness;
 		}
 	}
-}
+}*/
 
 
 float ALightDetector::CalculateBrightness()
 {
-	// Ensure that the user has actually supplied us with RenderTextures
+/*	// Ensure that the user has actually supplied us with RenderTextures
 	if (detectorTextureTop == nullptr || detectorTextureBottom == nullptr)
 	{
 		return 0.0f;
@@ -70,5 +110,51 @@ float ALightDetector::CalculateBrightness()
 	ProcessRenderTexture(detectorTextureBottom);
 
 	// At the end we return the brightest pixel we found in the RenderTextures
-	return brightnessOutput;
+	return brightnessOutput;*/
+
+	return SamplePixelsFromTarget(LightDetectionRenderTarget);
 }
+
+float ALightDetector::SamplePixelsFromTarget(UTextureRenderTarget2D* InTexture)
+{
+	if (!InTexture) return 0.0f;
+
+	FRenderTarget* RenderTargetResource = InTexture->GameThread_GetRenderTargetResource();
+	if (!RenderTargetResource) return 0.0f;
+	PixelStorage.Reset();
+	RenderTargetResource->ReadPixels(PixelStorage);
+
+	int32 Width = InTexture->SizeX;
+	int32 Height = InTexture->SizeY;
+
+	if (Width < 181 || Height < 181)
+	{
+		return 0.0f;
+	}
+
+	const int32 Coords[4][2] = {
+		{45, 45},
+		{90, 90},
+		{135, 135},
+		{180, 180}
+	};
+
+	float SumR = 0.0f;
+
+	for (int i = 0; i < 4; i++)
+	{
+		int32 X = Coords[i][0];
+		int32 Y = Coords[i][1];
+
+		int32 Index = (Y * Width) + X;
+
+		if (PixelStorage.IsValidIndex(Index))
+		{
+			float NormalizedR = PixelStorage[Index].R / 255.0f;
+			SumR += NormalizedR;
+		}
+	}
+
+	return SumR / 4.0f;
+}
+
