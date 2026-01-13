@@ -165,6 +165,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
 	ALightDetector* LightDetector;
 
+	// ChildActor Component
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
+	UChildActorComponent* LightDetectorComponent;
+
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
 	float CrouchSpeed = 150.0f;
@@ -277,4 +281,11 @@ public:
 	{
 		return LastMovementInput;
 	}
+private:
+	// --- Casing variable for LightDetection
+	UPROPERTY()
+	ALightDetector* LightDetectorInstance;
+
+	// Stealth logic example
+	void UpdateStealthLevel();
 };

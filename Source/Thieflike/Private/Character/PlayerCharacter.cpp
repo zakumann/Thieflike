@@ -58,6 +58,10 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->SetupAttachment(FirstPersonCameraComponent);
 	FirstPersonMeshComponent->bCastDynamicShadow = false;
 	FirstPersonMeshComponent->CastShadow = false;
+
+	// Child Actor for lightDetector
+	LightDetectorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("LightDetectorComponent"));
+	LightDetectorComponent->SetupAttachment(GetCapsuleComponent());
 }
 
 // Called when the game starts or when spawned
@@ -79,12 +83,25 @@ void APlayerCharacter::BeginPlay()
 	// Display a debug message for five seconds. 
 	// The -1 "Key" value argument prevents the message from being updated or refreshed.
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("We are using FPSCharacter."));
+
+	if (LightDetectorComponent)
+	{
+		AActor* ChildActor = LightDetectorComponent->GetChildActor();
+		LightDetectorInstance = Cast<ALightDetector>(ChildActor);
+
+		if (!LightDetectorInstance)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("LightDetector class is not inherit or failed to cast."));
+		}
+	}
 }
 
 // Called every frame
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	UpdateStealthLevel();
 
 	if (!FirstPersonSpringArmComponent && !FirstPersonCameraComponent)
 	{
@@ -183,6 +200,18 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
 	}
 }
+
+void APlayerCharacter::UpdateStealthLevel()
+{
+	if (LightDetectorInstance)
+	{
+		float CurrentBrightness = LightDetectorInstance->CalculateBrightness();
+
+		// (Debug) Output into screen.
+		GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Yellow, FString::Printf(TEXT("Light: %f"), CurrentBrightness));
+	}
+}
+
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
 	// 2D Vector of movement values returned from the input action
