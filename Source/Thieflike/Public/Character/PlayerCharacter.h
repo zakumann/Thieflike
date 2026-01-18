@@ -96,17 +96,24 @@ public:
 	void StopLeanLeft(const FInputActionValue& Value);
 	void StartSprint();
 	void StopSprint();
-	void StopMantle(bool bSuccess);
 
+public:
 	// ---- Mantle ---- //
 	void PerformMantle();
-	void CompleteMantleSequence();
+protected:
+
+	// Possibility of Mantling.
 	bool CanMantle(FVector& OutMantleTargetLocation);
 
+	// Complete it when finish mantle
+	void CompleteMantleSequence();
+	// If failed stop mantle
+	void StopMantle(bool bSuccess);
+
 	// Safety: Previous location to check if we are stuck in mantle
-	FVector LastMantleLocation;
 	float StuckTimer = 0.0f;
 
+public:
 	//---- Interact ----//
 	void Interact();
 
@@ -199,34 +206,27 @@ public:
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 
-public:
+protected:
 	// ---- Mantle Vaariables & Functions ---- //
-	// Maximum distance in front of the player to check for mantleable obstacles
-	UPROPERTY(EditDefaultsOnly, Category= "Mantle")
-	float InitialTraceLength = 80.0;
-
-	// Maximum height of an obstacle to mantle over
-	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	float SecondaryTraceZOffset;
-
-	bool bCanMantle;
-
-	// Mantle positions for movement
-	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	FVector MantlePos1;
-	UPROPERTY(EditDefaultsOnly, Category = "Mantle")
-	FVector MantlePos2;
-
-	// Mantle montage length
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
-	float MontageLength = 0.8f;
-
-	// Track if mantle has been used in current jump/fall
+	UPROPERTY(VisibleAnywhere, Category = "Mantle")
 	bool bHasMantledThisJump = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle")
-	float MaxMantleHeight = 200.0f;
+	UPROPERTY(VisibleAnywhere, Category = "Mantle")
+	bool bCanMantle = false;
 
+	UPROPERTY(EditAnywhere, Category = "Mantle")
+	float MantleTraceDistance = 100.0f; // detect the wall
+
+	/** using with animation (if use this) */
+	UPROPERTY(EditAnywhere, Category = "Mantle")
+	float MantleDuration = 0.8f;
+
+	// calculate variable
+	FVector MantlePos1; // hainging position
+	FVector MantlePos2; // climb up position
+	FVector LastMantleLocation;
+	FTimerHandle MantleTimerHandle;
+public:
 	//---- Ladder Functions & Variables ----//
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Climbing")
 	float LadderClimbSpeed = 200.0f;
@@ -254,15 +254,11 @@ public:
 	/** Get the nearest point on the ladder */
 	FVector GetNearestPointOnLadder(ALadder* Ladder) const;
 
-private:
 	// Variable to track the target height for smooth transition
 	float TargetCapsuleHalfHeight;
 
 	// Store the original camera relative location
 	FVector DefaultSpringArmLocation;
-
-	// Mantle timer handle
-	FTimerHandle MantleTimerHandle;
 
 	/** Target height when climbing ladder */
 	float LadderTargetZ;
