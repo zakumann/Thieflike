@@ -226,42 +226,26 @@ protected:
 	FVector MantlePos2; // climb up position
 	FVector LastMantleLocation;
 	FTimerHandle MantleTimerHandle;
-public:
-	//---- Ladder Functions & Variables ----//
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Climbing")
-	float LadderClimbSpeed = 200.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Climbing")
-	float LadderExitDistance = 30.0f;
-
-	// [Ladder System]
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Climbing")
-	bool bIsClimbingLadder = false;
-
-	/** Reference to the ladder currently being climbed */
-	UPROPERTY(VisibleAnywhere, Category = "Climbing")
-	ALadder* CurrentLadder;
-
-	/** Start climbing the ladder */
-	void StartClimbLadder(ALadder* Ladder);
-
-	/** Stop climbing the ladder */
-	void StopClimbLadder();
-
-	/** Handle ladder climbing movement */
-	void UpdateLadderMovement(float DeltaTime);
-
-	/** Get the nearest point on the ladder */
-	FVector GetNearestPointOnLadder(ALadder* Ladder) const;
 
 	// Variable to track the target height for smooth transition
 	float TargetCapsuleHalfHeight;
 
 	// Store the original camera relative location
 	FVector DefaultSpringArmLocation;
+protected:
+	UPROPERTY(VisibleAnywhere, Category = "Movement|Ladder")
+	bool bIsClimbingLadder = false;
 
-	/** Target height when climbing ladder */
-	float LadderTargetZ;
+	UPROPERTY(VisibleAnywhere, Category = "Movement|Ladder")
+	class ALadder* CurrentLadder = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Ladder")
+	float LadderClimbSpeed = 200.0f;
+public:
+	void SetLadderMode(bool bEnable, class ALadder* Ladder);
+
+	void CheckLadderConstraints();
+
 public:
 	// --- Inventory / Economy ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")

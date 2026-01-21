@@ -15,8 +15,11 @@ ADoor::ADoor()
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent->SetRelativeLocation(FVector(0.0f, 50.0f, 0.0f));
 
+	DoorFrame = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorFrame"));
+	DoorFrame->SetupAttachment(RootComponent);
+
 	Door = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Door"));
-	Door->SetupAttachment(RootComponent);
+	Door->SetupAttachment(DoorFrame);
 	Door->SetRelativeLocation(FVector(0.0f, 50.0f, -100.f));
 
 	isClosed = true;

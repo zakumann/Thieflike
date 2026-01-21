@@ -32,6 +32,9 @@ public:
 	void OpenDoor(float DeltaTime);
 
 	UPROPERTY(VisibleAnywhere, Category = "Mesh")
+	class UStaticMeshComponent* DoorFrame;
+
+	UPROPERTY(VisibleAnywhere, Category = "Mesh")
 	class UStaticMeshComponent* Door;
 
 	UFUNCTION()

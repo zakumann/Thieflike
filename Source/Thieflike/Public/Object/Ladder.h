@@ -15,6 +15,10 @@ public:
 	// Sets default values for this actor's properties
 	ALadder();
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
 	class USceneComponent* DefaultSceneRoot;
 
@@ -33,6 +37,13 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Ladder | Customize", meta = (ClampMin="0", ClampMax="100"))
 	float TopOffset = 20.f;
+
+	// How long collisionforwardoff in front of Ladder mesh
+	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
+	float CollisionForwardOffset = 10.0f;
+	// Box thick(Where Player lifting)
+	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
+	float CollisionThickness = 40.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
 	class UInstancedStaticMeshComponent* MiddleParts;
@@ -53,4 +64,11 @@ public:
 	float GetLadderMaxZ() const;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
+
+private:
+	UFUNCTION()
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };

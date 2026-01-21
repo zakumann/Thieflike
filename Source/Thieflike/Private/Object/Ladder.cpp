@@ -4,6 +4,7 @@
 #include "Object/Ladder.h"
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Character/PlayerCharacter.h"
 
 // Sets default values
 ALadder::ALadder()
@@ -16,14 +17,24 @@ ALadder::ALadder()
 
 	BoxCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("Box Collision"));
 	BoxCollision->SetupAttachment(GetRootComponent());
-	BoxCollision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	BoxCollision->SetCollisionProfileName(TEXT("Trigger"));
 
 	LadderBase = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LadderBase"));
 	LadderBase->SetupAttachment(GetRootComponent());
 
-
 	MiddleParts = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Middles"));
 	MiddleParts->SetupAttachment(LadderBase);
+}
+
+void ALadder::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (BoxCollision)
+	{
+		BoxCollision->OnComponentBeginOverlap.AddDynamic(this, &ALadder::OnOverlapBegin);
+		BoxCollision->OnComponentEndOverlap.AddDynamic(this, &ALadder::OnOverlapEnd);
+	}
 }
 
 float ALadder::GetLadderMinZ() const
@@ -71,10 +82,15 @@ void ALadder::OnConstruction(const FTransform& Transform)
 		MiddleParts->ClearInstances();
 
 		// Cache mesh sizes
-		float TopHeight = TopLadderMesh->GetBoundingBox().GetSize().Z;
-		float MidHeight = MidLadderMesh->GetBoundingBox().GetSize().Z;
+		// GetBoundingBox().GetSize() is total Height
+		FVector TopMeshSize = TopLadderMesh->GetBoundingBox().GetSize();
+		FVector MidMeshSize = MidLadderMesh->GetBoundingBox().GetSize();
 
-		for (int i = 0; i < MidPartCount; i++)
+		// Cache mesh sizes
+		float TopHeight = TopMeshSize.Z;
+		float MidHeight = MidMeshSize.Z;
+
+		for (int i = 0; i <= MidPartCount; i++)
 		{
 			float ZLocation = -TopHeight - (MidHeight * i);
 
@@ -83,21 +99,44 @@ void ALadder::OnConstruction(const FTransform& Transform)
 		}
 
 		FVector BoxExtent;
-		BoxExtent.X = TopLadderMesh->GetBoundingBox().GetSize().X / 2;
-		BoxExtent.Y = TopLadderMesh->GetBoundingBox().GetSize().Y / 2;
-
-		FVector BoxLocation = FVector::ZeroVector;
-		BoxLocation.X = 0.f;
-		BoxLocation.Y = 0.f;
-
 		const float TotalHeight = TopHeight + (MidHeight * MidPartCount);
-
 		BoxExtent.Z = (TotalHeight * 0.5f) + TopOffset;
+		//Y side : Ladder vertical match with size of mesh
+		BoxExtent.Y = TopMeshSize.Y * 0.5f;
+		//X side: Thickness
+		BoxExtent.X = CollisionThickness;
+
+		// --- Set location ---
+		FVector BoxLocation = FVector::ZeroVector;
+
+		// Z location: center point
 		BoxLocation.Z = -BoxExtent.Z + TopOffset;
 
+		// Y location: center
+		BoxLocation.Y = 0.f;
+
+		float MeshHalfDepth = TopMeshSize.X * 0.5f;
+		BoxLocation.X = MeshHalfDepth + BoxExtent.X + CollisionForwardOffset;
 
 		BoxCollision->SetBoxExtent(BoxExtent, true);
 		BoxCollision->SetRelativeLocation(BoxLocation);
+
+	}
+}
+
+void ALadder::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(OtherActor))
+	{
+		Player->SetLadderMode(true, this);
+	}
+}
+
+void ALadder::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(OtherActor))
+	{
+		Player->SetLadderMode(false, nullptr);
 	}
 }
 

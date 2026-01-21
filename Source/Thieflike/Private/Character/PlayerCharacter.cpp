@@ -109,11 +109,6 @@ void APlayerCharacter::Tick(float DeltaTime)
 		return;
 	}
 
-	if (bIsClimbingLadder)
-	{
-		UpdateLadderMovement(DeltaTime);
-	}
-
 	float AllowedLean = GetAllowedLeanOffset(TargetLeanOffset); //GetAllowedLeanOffset is for Lean to the Playercharacter FirstPersonSpringArmComponent.
 	float LeanRatio = (MaxLeanOffset != 0.f) ? FMath::Abs(CurrentLeanOffset / MaxLeanOffset) : 0.f; // While Leaning Roll until contacts the wall
 
@@ -163,6 +158,12 @@ void APlayerCharacter::Tick(float DeltaTime)
 			StuckTimer = 0.0f;
 		}
 		LastMantleLocation = CurrentLoc;
+	}
+
+	// Limit Ladder height check
+	if (bIsClimbingLadder && CurrentLadder)
+	{
+		CheckLadderConstraints();
 	}
 }
 
@@ -216,12 +217,22 @@ void APlayerCharacter::UpdateStealthLevel()
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
 	// 2D Vector of movement values returned from the input action
-	const FVector2D MovementValue = Value.Get<FVector2D>();
-	LastMovementInput = MovementValue;
+	const FVector2D MovementVector = Value.Get<FVector2D>();
+	LastMovementInput = MovementVector;
 
+	// Ladder Mode
 	if (bIsClimbingLadder)
 	{
-		return; // Don't process normal walking movement
+		if (Controller)
+		{
+			const FRotator ControlRotation = Controller->GetControlRotation();
+			const FVector LookDirection = FRotationMatrix(ControlRotation).GetUnitAxis(EAxis::X);
+
+			// if press Move forward key: look up move up, look down move down
+			// Flying mode Z move is smootly
+			AddMovementInput(LookDirection, MovementVector.Y);
+		}
+		return;
 	}
 
 	// Check if the controller posessing this Actor is valid
@@ -235,8 +246,8 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
 		// Add movement input based on direction and input value
-		AddMovementInput(ForwardDirection, MovementValue.Y);
-		AddMovementInput(RightDirection, MovementValue.X);
+		AddMovementInput(ForwardDirection, MovementVector.Y);
+		AddMovementInput(RightDirection, MovementVector.X);
 	}
 }
 
@@ -253,10 +264,6 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 
 void APlayerCharacter::Jump()
 {
-	if (bIsClimbingLadder)
-	{
-		return;
-	}
 
 	// If crouching, stand up first so mantle checks use standing height
 	if (GetCharacterMovement() && GetCharacterMovement()->IsCrouching())
@@ -377,25 +384,6 @@ void APlayerCharacter::Interact()
 			// We pass 'this' (the player) so the item knows who to give money to
 			Loot->OnInteract(this);
 		}
-
-		// 4. Ladder
-		if (ALadder* Ladder = Cast<ALadder>(HitActor))
-		{
-			if (bIsClimbingLadder)
-			{
-				StopClimbLadder();
-			}
-			else
-			{
-				StartClimbLadder(Ladder);
-			}
-			return;
-		}
-	}
-
-	else if (bIsClimbingLadder)
-	{
-		StopClimbLadder();
 	}
 }
 
@@ -533,206 +521,39 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	}
 }
 
-void APlayerCharacter::StartClimbLadder(ALadder* Ladder)
+void APlayerCharacter::SetLadderMode(bool bEnable, ALadder* Ladder)
 {
-	if (!Ladder || bIsClimbingLadder)
+	bIsClimbingLadder = bEnable;
+	CurrentLadder = bEnable ? Ladder : nullptr;
+
+	if (bIsClimbingLadder)
 	{
-		return;
-	}
+		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 
-	CurrentLadder = Ladder;
-	bIsClimbingLadder = true;
-
-
-	// Disable normal walking/falling
-	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
-	// Stop current movement
-	GetCharacterMovement()->StopMovementImmediately();
-
-	UBoxComponent* BoxCollision = Ladder->BoxCollision;
-	FVector LadderCenter = BoxCollision->GetComponentLocation();
-	FVector PlayerLocation = GetActorLocation();
-
-	// Target Location: Ladder's X/Y, Player's Z
-	FVector TargetLoc = FVector(LadderCenter.X, LadderCenter.Y, PlayerLocation.Z);
-
-	// Offset slightly forward from the ladder so we don't clip inside the mesh
-	FVector ForwardOffset = Ladder->GetActorForwardVector() * 40.0f;
-	TargetLoc += ForwardOffset;
-
-	SetActorLocation(TargetLoc);
-
-	// 3. Snap Rotation (Face the ladder)
-	FRotator TargetRot = Ladder->GetActorRotation();
-	TargetRot.Yaw += 180.0f; // Face the ladder
-	SetActorRotation(TargetRot);
-
-	// --- Set Ladder Max and Min
-	float LadderMinZ = Ladder->GetLadderMinZ();
-	float LadderMaxZ = Ladder->GetLadderMaxZ();
-	LadderTargetZ = FMath::Clamp(GetActorLocation().Z, LadderMinZ, LadderMaxZ);
-
-	UE_LOG(LogTemp, Warning, TEXT("Started climbing ladder at Z: %f (Min: %f, Max: %f)"), LadderTargetZ, LadderMinZ, LadderMaxZ);
-}
-
-void APlayerCharacter::StopClimbLadder()
-{
-	if (!bIsClimbingLadder)
-	{
-		return;
-	}
-
-	bIsClimbingLadder = false;
-	CurrentLadder = nullptr;
-
-	// Return to normal movement
-	GetWorld()->GetTimerManager().ClearTimer(MantleTimerHandle);
-	bHasMantledThisJump = false;
-
-	// Return to normal movement
-	if (GetCharacterMovement())
-	{
-		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stopped climbing ladder"));
-}
-
-void APlayerCharacter::UpdateLadderMovement(float DeltaTime)
-{
-	if (!CurrentLadder || !GetCharacterMovement())
-	{
-		StopClimbLadder();
-		return;
-	}
-
-	FVector PlayerLocation = GetActorLocation();
-	UBoxComponent* BoxCollision = CurrentLadder->BoxCollision;
-	FVector LadderLocation = BoxCollision->GetComponentLocation();
-	FVector BoxExtent = BoxCollision->GetScaledBoxExtent();
-
-	// --- Ladder : Min and Max ---
-	float LadderMinZ = CurrentLadder->GetLadderMinZ();
-	float LadderMaxZ = CurrentLadder->GetLadderMaxZ();
-
-	// ---- Check if player is still within ladder bounds ----
-	float DistX = FMath::Abs(PlayerLocation.X - LadderLocation.X);
-	float DistY = FMath::Abs(PlayerLocation.Y - LadderLocation.Y);
-
-/*	// If player moves outside the box collision, stop climbing
-	if (DistX > BoxExtent.X || DistY > BoxExtent.Y)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Out of ladder bounds (X/Y)! Falling..."));
-		StopClimbLadder();
-		return;
-	}*/
-
-	// LstMovementInput.Y works into Move function(W/S)
-	float ClimbInput = LastMovementInput.Y;
-
-	if (FMath::Abs(ClimbInput) > 0.1f)
-	{
-		LadderTargetZ += ClimbInput * LadderClimbSpeed * DeltaTime;
-	}
-
-	// Clamp target Z within ladder bounds
-	LadderTargetZ = FMath::Clamp(LadderTargetZ, LadderMinZ, LadderMaxZ);
-
-	// Move player to stay aligned with ladder (within box bounds)
-	float ClampedX = FMath::Clamp(PlayerLocation.X, LadderLocation.X - BoxExtent.X, LadderLocation.X + BoxExtent.X);
-	float ClampedY = FMath::Clamp(PlayerLocation.Y, LadderLocation.Y - BoxExtent.Y, LadderLocation.Y + BoxExtent.Y);
-
-	FVector NewLocation = FVector(ClampedX, ClampedY, LadderTargetZ);
-
-	// Set movement velocity to reach target position
-	FVector DeltaPosition = NewLocation - PlayerLocation;
-
-	if (FVector::Dist(PlayerLocation, NewLocation) < 1.0f)
-	{
-		SetActorLocation(NewLocation);
-		GetCharacterMovement()->Velocity = FVector::ZeroVector;
+		GetCharacterMovement()->BrakingDecelerationFlying = 2000.0f;
 	}
 	else
 	{
-		GetCharacterMovement()->Velocity = DeltaPosition / DeltaTime;
-	}
-
-	// Debug visualization
-	DrawDebugBox(
-		GetWorld(),
-		LadderLocation,
-		BoxExtent,
-		FColor::Green,
-		false,
-		0.0f,
-		1
-	);
-
-	// Debug visualisation
-	DrawDebugLine(
-		GetWorld(),
-		LadderLocation + FVector(-BoxExtent.X, 0, 0),
-		LadderLocation + FVector(BoxExtent.X, 0, 0),
-		FColor::Yellow,
-		false,
-		0.0f,
-		2
-	);
-
-	DrawDebugLine(
-		GetWorld(),
-		FVector(LadderLocation.X - BoxExtent.X, LadderLocation.Y, LadderMaxZ),
-		FVector(LadderLocation.X + BoxExtent.X, LadderLocation.Y, LadderMaxZ),
-		FColor::Cyan,
-		false,
-		0.0f,
-		2
-	);
-
-	// Draw current player position on ladder
-	DrawDebugSphere(
-		GetWorld(),
-		PlayerLocation,
-		10.0f,
-		12,
-		FColor::Red,
-		false,
-		0.0f,
-		1
-	);
-
-	// Check if player wants to exit the ladder (Jump or Interact)
-	APlayerController* PC = Cast<APlayerController>(Controller);
-	if (PC && (PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::E)))
-	{
-		// Exit ladder forward
-		FVector ExitDirection = GetActorForwardVector() * LadderExitDistance;
-		AddActorWorldOffset(ExitDirection);
-		StopClimbLadder();
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		GetCharacterMovement()->BrakingDecelerationFlying = 0.0f;
 	}
 }
 
-
-FVector APlayerCharacter::GetNearestPointOnLadder(ALadder* Ladder) const
+void APlayerCharacter::CheckLadderConstraints()
 {
-	if (!Ladder || !Ladder->BoxCollision)
+	if (!CurrentLadder) return;
+
+	float CurrentZ = GetActorLocation().Z;
+	float MaxZ = CurrentLadder->GetLadderMaxZ() - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	FVector Velocity = GetCharacterMovement()->Velocity;
+
+	// reach highest location move up speed terminate
+	if (CurrentZ >= MaxZ && Velocity.Z > 0)
 	{
-		return GetActorLocation();
+		Velocity.Z = 0.0f; // stop immediately
+		GetCharacterMovement()->Velocity = Velocity;
 	}
 
-	// Get the ladder's box collision component
-	UBoxComponent* BoxCollision = Ladder->BoxCollision;
-	FVector LadderLocation = BoxCollision->GetComponentLocation();
-	FVector PlayerLocation = GetActorLocation();
-
-	// Clamp player position to ladder bounds
-	FVector BoxExtent = BoxCollision->GetScaledBoxExtent();
-
-	float ClampedX = FMath::Clamp(PlayerLocation.X, LadderLocation.X - BoxExtent.X, LadderLocation.X + BoxExtent.X);
-	float ClampedY = FMath::Clamp(PlayerLocation.Y, LadderLocation.Y - BoxExtent.Y, LadderLocation.Y + BoxExtent.Y);
-	float ClampedZ = FMath::Clamp(PlayerLocation.Z, LadderLocation.Z - BoxExtent.Z, LadderLocation.Z + BoxExtent.Z);
-
-	return FVector(ClampedX, ClampedY, ClampedZ);
 }
 
 void APlayerCharacter::AddMoney(int32 Amount)
@@ -749,7 +570,7 @@ void APlayerCharacter::PerformMantle()
 	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 
-	// Phase 1: 위로 상승 (MantlePos1 근처 높이까지) & 앞으로 붙기
+	// Phase 1: Upper (MantlePos1 near height) & attach into front
 	float Duration = MantleDuration;
 
 	FTimerDelegate TimerDel;
@@ -758,7 +579,7 @@ void APlayerCharacter::PerformMantle()
 
 	// --- Phase 1: climb up ---
 	FVector CurrentLoc = GetActorLocation();
-	// 목표 높이: slightly upper than ledge
+	// Setting: slightly upper than ledge
 	FVector UpTarget = FVector(CurrentLoc.X, CurrentLoc.Y, MantlePos2.Z);
 	FVector MoveDir = (UpTarget - CurrentLoc);
 	float Phase1Time = Duration * 0.5f;
@@ -883,7 +704,7 @@ bool APlayerCharacter::CanMantle(FVector& OutMantleTargetLocation)
 
 	if (bBlocked) return false;
 
-	// --- 5. 목표 지점 설정 ---
+	// --- 5. Target setting---
 	// MantlePos1: hanging position(in front of wall, slightly up)
 	MantlePos1 = LedgeHit.ImpactPoint + (WallNormal * (CapsuleRadius + 10.0f)) + FVector(0, 0, -50.0f);
 
