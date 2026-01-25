@@ -40,10 +40,10 @@ public:
 
 	// How long collisionforwardoff in front of Ladder mesh
 	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
-	float CollisionForwardOffset = 10.0f;
+	float CollisionForwardOffset = 0.0f;
 	// Box thick(Where Player lifting)
 	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
-	float CollisionThickness = 40.0f;
+	float CollisionThickness = 20.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
 	class UInstancedStaticMeshComponent* MiddleParts;

@@ -85,15 +85,23 @@ void APlayerCharacter::BeginPlay()
 	// The -1 "Key" value argument prevents the message from being updated or refreshed.
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("We are using FPSCharacter."));
 
-	if (LightDetectorComponent)
-	{
-		AActor* ChildActor = LightDetectorComponent->GetChildActor();
-		LightDetectorInstance = Cast<ALightDetector>(ChildActor);
+	FActorSpawnParameters Params;
+	Params.Owner = this;
 
-		if (!LightDetectorInstance)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("LightDetector class is not inherit or failed to cast."));
-		}
+	LightDetectorInstance = GetWorld()->SpawnActor<ALightDetector>(
+		ALightDetector::StaticClass(),
+		GetActorLocation(),
+		GetActorRotation(),
+		Params
+	);
+
+	if (LightDetectorInstance)
+	{
+		LightDetectorInstance->AttachToComponent(
+			GetMesh(),
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			TEXT("head") // head 소켓 추천
+		);
 	}
 }
 
@@ -165,6 +173,18 @@ void APlayerCharacter::Tick(float DeltaTime)
 	{
 		CheckLadderConstraints();
 	}
+
+	if (LightDetectorInstance)
+	{
+		float Brightness = LightDetectorInstance->CalculateBrightness();
+
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			0.f,
+			FColor::Yellow,
+			FString::Printf(TEXT("Light Level: %.2f"), Brightness)
+		);
+	}
 }
 
 // Called to bind functionality to input
@@ -183,7 +203,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Bind Jump Actions
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Ongoing, this, &APlayerCharacter::WhileJumping);
+		/*EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Ongoing, this, &APlayerCharacter::WhileJumping);*/
+
+		if (MantleAction)
+		{
+			EnhancedInputComponent->BindAction(MantleAction, ETriggerEvent::Started, this, &APlayerCharacter::StartMantle);
+			EnhancedInputComponent->BindAction(MantleAction, ETriggerEvent::Ongoing, this, &APlayerCharacter::OngoingMantle);
+			EnhancedInputComponent->BindAction(MantleAction, ETriggerEvent::Completed, this, &APlayerCharacter::EndMantle);
+		}
 
 		// Lean
 		EnhancedInputComponent->BindAction(LeanRightAction, ETriggerEvent::Started, this, &APlayerCharacter::StartLeanRight);
@@ -221,17 +248,15 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	LastMovementInput = MovementVector;
 
 	// Ladder Mode
-	if (bIsClimbingLadder)
+	if (bIsClimbingLadder && CurrentLadder)
 	{
-		if (Controller)
-		{
-			const FRotator ControlRotation = Controller->GetControlRotation();
-			const FVector LookDirection = FRotationMatrix(ControlRotation).GetUnitAxis(EAxis::X);
+		const FVector LadderUp = CurrentLadder->GetActorUpVector();
+		const FVector LadderRight = CurrentLadder->GetActorRightVector();
 
-			// if press Move forward key: look up move up, look down move down
-			// Flying mode Z move is smootly
-			AddMovementInput(LookDirection, MovementVector.Y);
-		}
+		// if press Move forward key: look up move up, look down move down
+		// Flying mode Z move is smootly
+		AddMovementInput(LadderUp, MovementVector.Y);
+
 		return;
 	}
 
@@ -264,6 +289,24 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 
 void APlayerCharacter::Jump()
 {
+	if (bIsClimbingLadder)
+	{
+		SetLadderMode(false, nullptr); // 1. Ladder mode off
+
+		// 2. Ladder opposite direction jump + upward launch
+		if (CurrentLadder)
+		{
+			// Ladder forward vector
+			FVector JumpDir = CurrentLadder->GetActorForwardVector();
+			// Reverse direction
+			// if you want to jump to the same direction as ladder forward, remove the '-' sign
+
+			FVector JumpVelocity = (JumpDir * 500.0f) + FVector(0, 0, 500.0f); // 500 backward, 500 upward
+			LaunchCharacter(JumpVelocity, false, false);
+		}
+		return;
+	}
+
 
 	// If crouching, stand up first so mantle checks use standing height
 	if (GetCharacterMovement() && GetCharacterMovement()->IsCrouching())
@@ -271,25 +314,11 @@ void APlayerCharacter::Jump()
 		UnCrouch();
 		return;
 	}
-
-	// Can mantle we are in the air (Jump state)
-	FVector TargetLocation;
-
-	// Check for Mantle Opportunity
-	if (!bHasMantledThisJump && CanMantle(TargetLocation))
-	{
-		// Mantle trace successful
-		bHasMantledThisJump = true; // Mark that we've used our mantle for this jump
-		PerformMantle();
-	}
-	else
-	{
 		// Fallback to regular jump
 		Super::Jump();
-	}
 }
 
-void APlayerCharacter::WhileJumping()
+/*void APlayerCharacter::WhileJumping()
 {
 	if (!bCanMantle)
 	{
@@ -297,7 +326,7 @@ void APlayerCharacter::WhileJumping()
 	}
 
 	PerformMantle();
-}
+}*/
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
@@ -397,9 +426,40 @@ void APlayerCharacter::StopSprint()
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
 
+void APlayerCharacter::StartMantle(const FInputActionValue& Value)
+{
+	if (bIsMantling) return;
+
+	// Can mantle we are in the air (Jump state)
+	FVector TargetLocation;
+
+	// Check for Mantle Opportunity
+	if (CanMantle(TargetLocation))
+	{
+		PerformMantle();
+	}
+}
+
+void APlayerCharacter::OngoingMantle(const FInputActionValue& Value)
+{
+	if (bIsMantling) return;
+
+	FVector TargetLocation;
+	if (CanMantle(TargetLocation))
+	{
+		PerformMantle();
+	}
+}
+
+void APlayerCharacter::EndMantle(const FInputActionValue& Value)
+{
+}
+
 void APlayerCharacter::StopMantle(bool bSuccess)
 {
 	GetWorld()->GetTimerManager().ClearTimer(MantleTimerHandle);
+
+	bIsMantling = false;
 
 	if (GetCharacterMovement())
 	{
@@ -459,10 +519,10 @@ void APlayerCharacter::CalculateVisibility()
 	//Determine target visibility percentage (0 to 100)
 	float TargetVisibilityPercent = AmbientLightFactor * 100.0f;
 
-	if (LightDetector)
+	if (LightDetectorInstance)
 	{
 		//LightDetector returns brightness (0 ~ 255). regularitise 0 ~ 1.
-		float Brightness = LightDetector->CalculateBrightness();
+		float Brightness = LightDetectorInstance->CalculateBrightness();
 		float Normalized = FMath::Clamp(Brightness / 255.0f, 0.0f, 1.0f);
 
 		// AmbientLightFactor Normlized - If Normalized is 0 then being Ambient, otherwise, 1 being exposure
@@ -526,6 +586,12 @@ void APlayerCharacter::SetLadderMode(bool bEnable, ALadder* Ladder)
 	bIsClimbingLadder = bEnable;
 	CurrentLadder = bEnable ? Ladder : nullptr;
 
+	//If try mantling sucess while climbing ladder, deactivate mantle
+	if(bIsMantling)
+	{
+		StopMantle(false);
+	}
+
 	if (bIsClimbingLadder)
 	{
 		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
@@ -539,21 +605,113 @@ void APlayerCharacter::SetLadderMode(bool bEnable, ALadder* Ladder)
 	}
 }
 
-void APlayerCharacter::CheckLadderConstraints()
-{
-	if (!CurrentLadder) return;
+void APlayerCharacter::CheckLadderConstraints() {
 
-	float CurrentZ = GetActorLocation().Z;
-	float MaxZ = CurrentLadder->GetLadderMaxZ() - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	FVector Velocity = GetCharacterMovement()->Velocity;
+	if (!CurrentLadder || !CurrentLadder->GetBoxCollision()) return;
 
-	// reach highest location move up speed terminate
-	if (CurrentZ >= MaxZ && Velocity.Z > 0)
+	UBoxComponent* LadderBox = CurrentLadder->GetBoxCollision();
+
+	// --- 1. Horizontal Lock ---
+	// Do not allow moving out of the ladder box horizontally
+
+	// Get the player's location in the ladder's local space
+	FTransform LadderTransform = CurrentLadder->GetActorTransform();
+	FVector LocalLoc = LadderTransform.InverseTransformPosition(GetActorLocation());
+
+	// Yside(width) position clamp
+	FVector BoxExtent = LadderBox->GetScaledBoxExtent();
+	float CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+	float SafeY = FMath::Max(0.0f, BoxExtent.Y - CapsuleRadius);
+	LocalLoc.Y = FMath::Clamp(LocalLoc.Y, -SafeY, SafeY);
+
+	// --- 2. Vertical Limits ---
+
+	float MaxZ = BoxExtent.Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	if (LocalLoc.Z >= MaxZ && GetCharacterMovement()->Velocity.Z > 0)
 	{
-		Velocity.Z = 0.0f; // stop immediately
-		GetCharacterMovement()->Velocity = Velocity;
+		// At the top of the ladder and trying to move up further
+		PerformLadderTopClimb();
+		return;
+	}
+	// Clamp the Z position to not go below the ladder base
+	if (LocalLoc.Z > MaxZ)
+	{
+		LocalLoc.Z = MaxZ;
+		FVector Velocity = GetCharacterMovement()->Velocity;
+		if (Velocity.Z > 0)
+		{
+			Velocity.Z = 0.f;
+			GetCharacterMovement()->Velocity = Velocity;
+		}
 	}
 
+	if (GetCharacterMovement()->Velocity.Z < 0)
+	{
+		FVector Start = GetActorLocation();
+		FVector End = Start - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 10.0f);
+		FHitResult Hit;
+		FCollisionQueryParams Params;
+
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			SetLadderMode(false, nullptr);
+			return;
+		}
+	}
+
+	// --- 3. position ---
+	// Convert back to world space and set actor location
+	FVector CorrectedWorldLoc = LadderTransform.TransformPosition(LocalLoc);
+	SetActorLocation(CorrectedWorldLoc);
+
+	// ---- 4. Face towards ladder ----
+	// Get ladder forward vector
+	FVector LadderForward = CurrentLadder->GetActorForwardVector();
+	FRotator TargetRot = LadderForward.ToOrientationRotator();
+	TargetRot.Pitch = 0.f;
+	TargetRot.Roll = 0.f;
+	SetActorRotation(TargetRot); 
+}
+
+// after reaching the top of the ladder, delay before restoring control
+void APlayerCharacter::PerformLadderTopClimb()
+{
+	if (GetWorld()->GetTimerManager().IsTimerActive(LadderFinishTimerHandle)) return;
+
+	ALadder* SavedLadder = CurrentLadder;
+	SetLadderMode(false, nullptr);
+
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	GetCharacterMovement()->StopMovementImmediately();
+
+	if (SavedLadder)
+	{
+		FVector LadderForward = SavedLadder->GetActorForwardVector();
+
+		FVector ClimbVelocity = FVector(0, 0, 450.0f) + (-LadderForward * 200.0f);
+
+		GetCharacterMovement()->Velocity = ClimbVelocity;
+	}
+
+	float ClimbDuration = 0.5f;
+	GetWorld()->GetTimerManager().SetTimer(LadderFinishTimerHandle, this, &APlayerCharacter::FinishLadderClimbSequence, ClimbDuration, false);
+}
+
+// Complete it when finish climbing ladder
+void APlayerCharacter::FinishLadderClimbSequence()
+{
+	// 1. Stop any residual movement
+	GetCharacterMovement()->StopMovementImmediately();
+
+	// Restore normal movement mode
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+
+	// If in the air, set to falling
+	if (GetCharacterMovement()->IsFalling())
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
 }
 
 void APlayerCharacter::AddMoney(int32 Amount)
@@ -566,6 +724,10 @@ void APlayerCharacter::PerformMantle()
 {
 	if (!GetCharacterMovement()) return;
 
+	//block multiple activate
+	if (bIsMantling) return;
+	bIsMantling = true;
+
 	// Set movement mode to flying during mantle
 	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
@@ -573,14 +735,10 @@ void APlayerCharacter::PerformMantle()
 	// Phase 1: Upper (MantlePos1 near height) & attach into front
 	float Duration = MantleDuration;
 
-	FTimerDelegate TimerDel;
-	TimerDel.BindLambda([this, Duration]()
-		{});
-
 	// --- Phase 1: climb up ---
 	FVector CurrentLoc = GetActorLocation();
 	// Setting: slightly upper than ledge
-	FVector UpTarget = FVector(CurrentLoc.X, CurrentLoc.Y, MantlePos2.Z);
+	FVector UpTarget = FVector(CurrentLoc.X, CurrentLoc.Y, MantlePos2.Z); // MantlePos2 phase1 move into Z-height
 	FVector MoveDir = (UpTarget - CurrentLoc);
 	float Phase1Time = Duration * 0.5f;
 
@@ -588,25 +746,29 @@ void APlayerCharacter::PerformMantle()
 
 	// Phase 2 prepare
 	GetWorld()->GetTimerManager().SetTimer(MantleTimerHandle, [this, Phase1Time]()
+	{
+		if (!bCanMantle)
 		{
-			if (!bCanMantle) return;
+			StopMantle(false);
+			return;
+		}
 
-			// --- Phase 2: move infront ---
-			FVector CurrentLoc = GetActorLocation();
-			// considering Z side as correct, move forward XY flat
-			FVector ForwardTarget = MantlePos2;
-			FVector MoveDir = (ForwardTarget - CurrentLoc);
+		// --- Phase 2: move Forward ---
+		FVector CurrentLoc = GetActorLocation();
+		// considering Z side as correct, move forward XY flat
+		FVector ForwardTarget = MantlePos2;
+		FVector MoveDir = (ForwardTarget - CurrentLoc);
 
-			GetCharacterMovement()->Velocity = MoveDir / Phase1Time;
+		GetCharacterMovement()->Velocity = MoveDir / Phase1Time;
 
-			// End
-			FTimerHandle EndTimer;
-			GetWorld()->GetTimerManager().SetTimer(EndTimer, [this]()
-				{
-					CompleteMantleSequence();
-				}, Phase1Time, false);
-
+		// End
+		FTimerHandle EndTimer;
+		GetWorld()->GetTimerManager().SetTimer(EndTimer, [this]()
+		{
+			CompleteMantleSequence();
 		}, Phase1Time, false);
+
+	}, Phase1Time, false);
 }
 
 void APlayerCharacter::CompleteMantleSequence()
@@ -616,14 +778,16 @@ void APlayerCharacter::CompleteMantleSequence()
 	// 1. final location force locate.
 	SetActorLocation(MantlePos2);
 
-	// 2. restore
+	// 2. Restore Movement
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 	GetCharacterMovement()->GravityScale = 1.0f;
 
-	// 3. being false
+	// 3. Reset Flags
 	bCanMantle = false;
 	bHasMantledThisJump = false;
+
+	bIsMantling = false;
 }
 
 // -------- Mantling --------

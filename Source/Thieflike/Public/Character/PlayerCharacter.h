@@ -73,6 +73,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
 	UInputAction* InteractAction;
 
+	// Mantle Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	class UInputAction* MantleAction;
+
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -87,7 +91,7 @@ public:
 	void Look(const FInputActionValue& Value);
 
 	void Jump();
-	void WhileJumping();
+	/*void WhileJumping();*/
 
 	void StartCrouch(const FInputActionValue& Value);
 	void StartLeanRight(const FInputActionValue& Value);
@@ -96,6 +100,11 @@ public:
 	void StopLeanLeft(const FInputActionValue& Value);
 	void StartSprint();
 	void StopSprint();
+
+	// ---- Mantle Input Handlers ----
+	void StartMantle(const FInputActionValue& Value);
+	void OngoingMantle(const FInputActionValue& Value);
+	void EndMantle(const FInputActionValue& Value);
 
 public:
 	// ---- Mantle ---- //
@@ -168,10 +177,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
 	float AmbientLightFactor = 0.1f; // Represents 10% ambient light when completely hidden from direct light
 
-	// Reference to LightDetector actor (assign in editor)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
-	ALightDetector* LightDetector;
-
 	// ChildActor Component
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
 	UChildActorComponent* LightDetectorComponent;
@@ -241,6 +246,19 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Ladder")
 	float LadderClimbSpeed = 200.0f;
+
+	// reach the top of the ladder
+	FTimerHandle LadderFinishTimerHandle;
+
+	// after reaching the top of the ladder, delay before restoring control
+	void PerformLadderTopClimb();
+
+	// Complete it when finish climbing ladder
+	void FinishLadderClimbSequence();
+protected:
+	// Check Mantle
+	bool bIsMantling = false;
+
 public:
 	void SetLadderMode(bool bEnable, class ALadder* Ladder);
 
