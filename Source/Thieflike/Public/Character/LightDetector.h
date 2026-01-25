@@ -7,7 +7,6 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/TextureRenderTarget2D.h"
-#include "UnrealClient.h"
 #include "LightDetector.generated.h"
 
 UCLASS()
@@ -16,32 +15,38 @@ class THIEFLIKE_API ALightDetector : public AActor
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this actor's properties
 	ALightDetector();
 
-	UFUNCTION(BlueprintCallable, Category = "LightDetection")
-	float CalculateBrightness();
-
-	void ProcessRenderTexture(UTextureRenderTarget2D* detectorTexture);
-
-	TArray<FColor> pixelStorage;
-	float pixelChannelR{ 0 };
-	float pixelChannelG{ 0 };
-	float pixelChannelB{ 0 };
-	float brightnessOutput{ 0 };
-	float currentPixelBrightness{ 0 };
-	FRenderTarget* fRenderTarget;
-
-	// The Render Textures we will be passing into the CalculateBrightness() method
-	UPROPERTY(EditAnywhere)
-	UTextureRenderTarget2D* detectorTextureTop;
-	UPROPERTY(EditAnywhere)
-	UTextureRenderTarget2D* detectorTextureBottom;
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
 public:
-	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+
+	UFUNCTION(BlueprintCallable, Category = "LightDetection")
+	float GetCurrentBrightness() const { return CachedBrightness; }
+
+protected:
+	// 내부 연산용 함수
+	void CalculateBrightness();
+	void ProcessRenderTexture(UTextureRenderTarget2D* TargetTexture, float& OutLocalMax);
+
+	// 타이머 핸들
+	FTimerHandle BrightnessTimerHandle;
+
+	// 계산 빈도 (초 단위, 0.1초 = 10fps)
+	const float CalculationInterval = 0.1f;
+
+	// 최종 계산된 밝기 값 캐싱
+	float CachedBrightness = 0.0f;
+
+	// 픽셀 데이터 버퍼 (매번 생성하지 않도록 재사용)
+	TArray<FColor> PixelBuffer;
+
+public:
+	UPROPERTY(EditAnywhere, Category = "LightDetection")
+	UTextureRenderTarget2D* DetectorTextureTop;
+
+	UPROPERTY(EditAnywhere, Category = "LightDetection")
+	UTextureRenderTarget2D* DetectorTextureBottom;
 };

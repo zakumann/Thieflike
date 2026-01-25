@@ -21,6 +21,7 @@ class UInputMappingContext;
 class UInputAction;
 class UInputComponent;
 class ALightDetector;
+class UChildActorComponent;
 class ALadder;
 
 UCLASS()
@@ -156,31 +157,29 @@ public:
 	float GetAllowedLeanOffset(float DesiredLean);
 
 	//---- Stealth System Variables & Functions ----//
-
-	/** Current visibility percentage (0 = fully hidden, 100 = fully visible) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
-	float CurrentVisibility;
-
-	/** Calculates the current visibility of the character based on surrounding light */
-	UFUNCTION(BlueprintCallable, Category = "Stealth")
-	void CalculateVisibility();
-
-	// Default exposure needed to be visible (adjustable in Blueprint)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
-	float VisibilityThreshold = 0.5f;
-
-	// How quickly the visibility value changes
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
-	float VisibilityInterpSpeed = 5.0f;
-
-	// A factor to simulate ambient light when not directly in a bright spot
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stealth")
-	float AmbientLightFactor = 0.1f; // Represents 10% ambient light when completely hidden from direct light
-
-	// ChildActor Component
+public:
+	// Light Detector Component
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
 	UChildActorComponent* LightDetectorComponent;
 
+	// Player's current light level
+	// 0.0: hiding in darkness, 1.0: fully illuminated
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stealth")
+	float CurrentLightLevel = 0.0f;
+
+	// Calculate Stealth Visibility Factor
+	// This function combines light level, movement speed, and posture to determine visibility
+	// ex: return (CurrentLightLevel * MovementSpeedModifier * PostureModifier);
+	UFUNCTION(BlueprintCallable, Category = "Stealth")
+	float GetStealthVisibilityFactor() const;
+protected:
+	// Light Detector Instance
+	UPROPERTY()
+	ALightDetector* LightDetectorInstance = nullptr;
+
+	// Update Stealth Level based on Light Detector and other factors
+	void UpdateStealthLevel();
+public:
 	//Crouch Speed
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crouching")
 	float CrouchSpeed = 150.0f;
@@ -245,7 +244,7 @@ protected:
 	class ALadder* CurrentLadder = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Ladder")
-	float LadderClimbSpeed = 200.0f;
+	float LadderClimbSpeed = 100.0f;
 
 	// reach the top of the ladder
 	FTimerHandle LadderFinishTimerHandle;
@@ -279,11 +278,4 @@ public:
 	{
 		return LastMovementInput;
 	}
-private:
-	// --- Casing variable for LightDetection
-	UPROPERTY()
-	ALightDetector* LightDetectorInstance;
-
-	// Stealth logic example
-	void UpdateStealthLevel();
 };

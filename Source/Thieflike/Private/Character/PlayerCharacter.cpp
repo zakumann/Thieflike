@@ -60,8 +60,7 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonMeshComponent->bCastDynamicShadow = false;
 	FirstPersonMeshComponent->CastShadow = false;
 
-	// Child Actor for lightDetector
-	LightDetectorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("LightDetectorComponent"));
+	LightDetectorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("LightDetectorComp"));
 	LightDetectorComponent->SetupAttachment(GetCapsuleComponent());
 }
 
@@ -88,20 +87,14 @@ void APlayerCharacter::BeginPlay()
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 
-	LightDetectorInstance = GetWorld()->SpawnActor<ALightDetector>(
-		ALightDetector::StaticClass(),
-		GetActorLocation(),
-		GetActorRotation(),
-		Params
-	);
-
-	if (LightDetectorInstance)
+	if (LightDetectorComponent)
 	{
-		LightDetectorInstance->AttachToComponent(
-			GetMesh(),
-			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-			TEXT("head") // head 소켓 추천
-		);
+		LightDetectorInstance = Cast<ALightDetector>(LightDetectorComponent->GetChildActor());
+
+		if (!LightDetectorInstance)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("LightDetector is missing from PlayerCharacter!"));
+		}
 	}
 }
 
@@ -109,8 +102,6 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	UpdateStealthLevel();
 
 	if (!FirstPersonSpringArmComponent && !FirstPersonCameraComponent)
 	{
@@ -130,9 +121,6 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// Roll
 	FirstPersonCameraComponent->SetRelativeRotation(FRotator(0.f, 0.f, CurrentLeanRoll));
-
-	// Calculate visibility every frame
-	CalculateVisibility();
 
 	// -------- Smooth Crouch Capsule Height Transition --------
 	float CurrentHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -174,17 +162,8 @@ void APlayerCharacter::Tick(float DeltaTime)
 		CheckLadderConstraints();
 	}
 
-	if (LightDetectorInstance)
-	{
-		float Brightness = LightDetectorInstance->CalculateBrightness();
-
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			0.f,
-			FColor::Yellow,
-			FString::Printf(TEXT("Light Level: %.2f"), Brightness)
-		);
-	}
+	// Update Light Detector
+	UpdateStealthLevel();
 }
 
 // Called to bind functionality to input
@@ -227,17 +206,6 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Interact
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
-	}
-}
-
-void APlayerCharacter::UpdateStealthLevel()
-{
-	if (LightDetectorInstance)
-	{
-		float CurrentBrightness = LightDetectorInstance->CalculateBrightness();
-
-		// (Debug) Output into screen.
-		GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Yellow, FString::Printf(TEXT("Light: %f"), CurrentBrightness));
 	}
 }
 
@@ -300,9 +268,12 @@ void APlayerCharacter::Jump()
 			FVector JumpDir = CurrentLadder->GetActorForwardVector();
 			// Reverse direction
 			// if you want to jump to the same direction as ladder forward, remove the '-' sign
+			// if Player jump to look direction, use GetActorForwardVector()
+			JumpDir *= -1.0f;
+			LaunchCharacter(FVector(JumpDir.X * 500.0f, JumpDir.Y * 500.0f, 500.0f), false, false);
 
-			FVector JumpVelocity = (JumpDir * 500.0f) + FVector(0, 0, 500.0f); // 500 backward, 500 upward
-			LaunchCharacter(JumpVelocity, false, false);
+/*			FVector JumpVelocity = (JumpDir * 500.0f) + FVector(0, 0, 500.0f); // 500 backward, 500 upward
+			LaunchCharacter(JumpVelocity, false, false);*/
 		}
 		return;
 	}
@@ -513,35 +484,39 @@ float APlayerCharacter::GetAllowedLeanOffset(float DesiredLean)
 	return DesiredLean;
 }
 
-// Calculate the player's visibility based on lighting conditions
-void APlayerCharacter::CalculateVisibility()
+void APlayerCharacter::UpdateStealthLevel()
 {
-	//Determine target visibility percentage (0 to 100)
-	float TargetVisibilityPercent = AmbientLightFactor * 100.0f;
-
 	if (LightDetectorInstance)
 	{
-		//LightDetector returns brightness (0 ~ 255). regularitise 0 ~ 1.
-		float Brightness = LightDetectorInstance->CalculateBrightness();
-		float Normalized = FMath::Clamp(Brightness / 255.0f, 0.0f, 1.0f);
+		// A. Bring in raw brightness value from Light Detector
+		float RawBrightness = LightDetectorInstance->GetCurrentBrightness();
 
-		// AmbientLightFactor Normlized - If Normalized is 0 then being Ambient, otherwise, 1 being exposure
-		float Exposure = FMath::Lerp(AmbientLightFactor, 1.0f, Normalized);
-		TargetVisibilityPercent = Exposure * 100.0f;
+		// B. Normalize to 0.0 ~ 1.0 range
+		// Pixel value ranges from 0 to 255, but in practice, outdoor lighting can exceed this.
+		// Threshold it at 200 for normalization.
+		const float MaxBrightnessRef = 200.0f;
+		CurrentLightLevel = FMath::Clamp(RawBrightness / MaxBrightnessRef, 0.0f, 1.0f);
+
+		// Debuging: Show current light level on screen
+		if(GEngine) GEngine->AddOnScreenDebugMessage(10, 0.1f, FColor::Yellow, FString::Printf(TEXT("Light: %.2f"), CurrentLightLevel));
 	}
+}
 
-	// Smoothly
-	if (GetWorld())
+float APlayerCharacter::GetStealthVisibilityFactor() const
+{
+	float Visibility = CurrentLightLevel;
+
+	if (GetCharacterMovement()->IsCrouching())
 	{
-		CurrentVisibility = FMath::FInterpTo(CurrentVisibility, TargetVisibilityPercent, GetWorld()->GetDeltaSeconds(), VisibilityInterpSpeed);
-	}
-	else
-	{
-		CurrentVisibility = TargetVisibilityPercent;
+		Visibility *= 0.5f;
 	}
 
-	// limited safety
-	CurrentVisibility = FMath::Clamp(CurrentVisibility, 0.0f, 100.0f);
+	if (GetVelocity().SizeSquared() > 10000.0f) // 움직이고 있다면
+	{
+		Visibility *= 1.2f;
+	}
+
+	return FMath::Clamp(Visibility, 0.0f, 1.0f);
 }
 
 void APlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
@@ -689,7 +664,7 @@ void APlayerCharacter::PerformLadderTopClimb()
 	{
 		FVector LadderForward = SavedLadder->GetActorForwardVector();
 
-		FVector ClimbVelocity = FVector(0, 0, 450.0f) + (-LadderForward * 200.0f);
+		FVector ClimbVelocity = FVector(0, 0, 650.0f) + (-LadderForward * 200.0f);
 
 		GetCharacterMovement()->Velocity = ClimbVelocity;
 	}

@@ -36,14 +36,14 @@ public:
 	int MidPartCount;
 
 	UPROPERTY(EditAnywhere, Category = "Ladder | Customize", meta = (ClampMin="0", ClampMax="100"))
-	float TopOffset = 20.f;
+	float TopOffset = 0.0f;
 
 	// How long collisionforwardoff in front of Ladder mesh
 	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
 	float CollisionForwardOffset = 0.0f;
 	// Box thick(Where Player lifting)
 	UPROPERTY(EditAnywhere, Category = "Ladder | Collision")
-	float CollisionThickness = 20.0f;
+	float CollisionThickness = 5.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ladder")
 	class UInstancedStaticMeshComponent* MiddleParts;

@@ -97,9 +97,11 @@ void ALadder::OnConstruction(const FTransform& Transform)
 			FTransform InstanceTransform(FVector(0.0f, 0.0f, ZLocation));
 			MiddleParts->AddInstance(InstanceTransform);
 		}
-
+		// --- Setup Box Collision ---
 		FVector BoxExtent;
+		// Z side: Ladder height match with size of mesh
 		const float TotalHeight = TopHeight + (MidHeight * MidPartCount);
+		// Add offset to reach slightly above the top of ladder
 		BoxExtent.Z = (TotalHeight * 0.5f) + TopOffset;
 		//Y side : Ladder vertical match with size of mesh
 		BoxExtent.Y = TopMeshSize.Y * 0.5f;
@@ -114,16 +116,16 @@ void ALadder::OnConstruction(const FTransform& Transform)
 
 		// Y location: center
 		BoxLocation.Y = 0.f;
-
+		// X location: in front of ladder mesh
 		float MeshHalfDepth = TopMeshSize.X * 0.5f;
 		BoxLocation.X = MeshHalfDepth + BoxExtent.X + CollisionForwardOffset;
-
+		// Set Box Collision extent & location
 		BoxCollision->SetBoxExtent(BoxExtent, true);
 		BoxCollision->SetRelativeLocation(BoxLocation);
 
 	}
 }
-
+// Overlap Events
 void ALadder::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (APlayerCharacter* Player = Cast<APlayerCharacter>(OtherActor))
@@ -131,7 +133,7 @@ void ALadder::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherA
 		Player->SetLadderMode(true, this);
 	}
 }
-
+// End Overlap Events
 void ALadder::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (APlayerCharacter* Player = Cast<APlayerCharacter>(OtherActor))

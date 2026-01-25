@@ -2,60 +2,76 @@
 
 
 #include "Character/LightDetector.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
 
 // Sets default values
 ALightDetector::ALightDetector()
 {
+	PrimaryActorTick.bCanEverTick = false;
 
 }
 
 void ALightDetector::BeginPlay()
 {
+	Super::BeginPlay();
+
+	GetWorld()->GetTimerManager().SetTimer(
+		BrightnessTimerHandle,
+		this,
+		&ALightDetector::CalculateBrightness,
+		CalculationInterval,
+		true // 반복 실행
+	);
 }
 
 void ALightDetector::Tick(float DeltaTime)
 {
+	Super::Tick(DeltaTime);
 }
 
-void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* detectorTexture)
+void ALightDetector::CalculateBrightness()
 {
-	// Read the pixels from our RenderTexture and store the data into our color array
-	// Note: ReadPixels is allegedly a very slow operation
-	fRenderTarget = detectorTexture->GameThread_GetRenderTargetResource();
-	fRenderTarget->ReadPixels(pixelStorage);
+	if (!DetectorTextureTop || !DetectorTextureBottom)
+	{
+		CachedBrightness = 0.0f;
+		return;
+	}
 
-	// We iterate through every pixel we retrieved and find the brightest pixel
-	for (int pixelNum = 0; pixelNum < pixelStorage.Num(); pixelNum++) {
-		pixelChannelR = pixelStorage[pixelNum].R;
-		pixelChannelG = pixelStorage[pixelNum].G;
-		pixelChannelB = pixelStorage[pixelNum].B;
+	float TopBrightness = 0.0f;
+	float BottomBrightness = 0.0f;
 
-		// Use a formula to determine brightness based on pixel color values. Source for Formula used:
-		// www.stackoverflow.com/questions/596216/formula-to-determine-brightness-of-rgb-color
-		currentPixelBrightness = ((0.299 * pixelChannelR) + (0.587 * pixelChannelG) + (0.114 * pixelChannelB));
+	ProcessRenderTexture(DetectorTextureTop, TopBrightness);
+	ProcessRenderTexture(DetectorTextureBottom, BottomBrightness);
 
-		// If the current pixel we just processed is brighter than the previously brightest pixel, replace it with the new pixel
-		if (currentPixelBrightness >= brightnessOutput) {
-			brightnessOutput = currentPixelBrightness;
+	CachedBrightness = FMath::Max(TopBrightness, BottomBrightness);
+}
+
+void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* TargetTexture, float& OutLocalMax)
+{
+	if (!TargetTexture) return;
+
+	FRenderTarget* RenderTarget = TargetTexture->GameThread_GetRenderTargetResource();
+	if (!RenderTarget) return;
+
+	// ReadPixels is still a blocking call, but we minimize its impact by reusing the PixelBuffer
+	RenderTarget->ReadPixels(PixelBuffer);
+
+	float LocalMax = 0.0f;
+
+	// Range-based for loop & Pointer to speed up
+	for (const FColor& Pixel : PixelBuffer)
+	{
+		// FColor is 0~255, divide(/255.0f) if you want 0.0~1.0 range
+		// Luminant formula: Y = 0.299R + 0.587G + 0.114B
+		float PixelValue = (0.299f * Pixel.R) + (0.587f * Pixel.G) + (0.114f * Pixel.B);
+
+		if (PixelValue > LocalMax)
+		{
+			LocalMax = PixelValue;
 		}
 	}
-}
 
-float ALightDetector::CalculateBrightness()
-{
-	// Ensure that the user has actually supplied us with RenderTextures
-	if (detectorTextureTop == nullptr || detectorTextureBottom == nullptr) {
-		return 0.0f;
-	}
-	// Reset our values for the next brightness test
-	currentPixelBrightness = 0;
-	brightnessOutput = 0;
-
-	// Process our top and bottom RenderTextures
-	ProcessRenderTexture(detectorTextureTop);
-	ProcessRenderTexture(detectorTextureBottom);
-
-
-	// At the end we return the brightest pixel we found in the RenderTextures
-	return brightnessOutput;
+	OutLocalMax = LocalMax; // 원본 값 유지 (0~255)
 }
