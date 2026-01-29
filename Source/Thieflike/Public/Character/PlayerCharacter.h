@@ -23,6 +23,7 @@ class UInputComponent;
 class ALightDetector;
 class UChildActorComponent;
 class ALadder;
+class AWeapon;
 
 UCLASS()
 class THIEFLIKE_API APlayerCharacter : public ACharacter
@@ -78,6 +79,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	class UInputAction* MantleAction;
 
+	// Weapon Input Actions
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* AttackAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* ChargeAttackAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* StealthTakedownAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+	UInputAction* EquipWeaponAction;
+
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -92,7 +106,6 @@ public:
 	void Look(const FInputActionValue& Value);
 
 	void Jump();
-	/*void WhileJumping();*/
 
 	void StartCrouch(const FInputActionValue& Value);
 	void StartLeanRight(const FInputActionValue& Value);
@@ -278,4 +291,47 @@ public:
 	{
 		return LastMovementInput;
 	}
+
+	public:
+		//---- Weapon System ----//
+
+		// Equip a weapon
+		UFUNCTION(BlueprintCallable, Category = "Weapon")
+		void EquipWeapon(AWeapon* WeaponToEquip);
+
+		// Unequip current weapon
+		UFUNCTION(BlueprintCallable, Category = "Weapon")
+		void UnequipWeapon();
+
+		// Toggle weapon equip/unequip
+		void ToggleWeapon();
+
+		// Get currently equipped weapon
+		UFUNCTION(BlueprintPure, Category = "Weapon")
+		AWeapon* GetCurrentWeapon() const { return CurrentWeapon; }
+
+		// Check if weapon is equipped
+		UFUNCTION(BlueprintPure, Category = "Weapon")
+		bool IsWeaponEquipped() const { return CurrentWeapon != nullptr; }
+
+protected:
+	// Weapon Input Handlers
+	void OnAttackPressed();
+	void OnAttackReleased();
+	void OnChargeAttackPressed();
+	void OnChargeAttackReleased();
+	void OnStealthTakedownPressed();
+
+	//---- Weapon Variables ----//
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<AWeapon> CurrentWeapon;
+
+	// Default weapon class to spawn at start (set in BP)
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	TSubclassOf<AWeapon> DefaultWeaponClass;
+
+	// Reference to spawned default weapon
+	UPROPERTY()
+	TObjectPtr<AWeapon> DefaultWeapon;
 };

@@ -15,6 +15,7 @@
 #include "Object/Ladder.h"
 #include "Components/ChildActorComponent.h"
 #include "Character/LightDetector.h" // LightDetector
+#include "Weapon/Weapon.h"
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -41,8 +42,7 @@ APlayerCharacter::APlayerCharacter()
 	// Create and attach the first person camera component
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	check(FirstPersonCameraComponent != nullptr);
-	FirstPersonCameraComponent->SetupAttachment(FirstPersonSpringArmComponent, USpringArmComponent::SocketName);// Attach to the end of the spring arm
-	// Disable pawn control rotation, we want the spring arm to handle it
+	FirstPersonCameraComponent->SetupAttachment(FirstPersonSpringArmComponent, USpringArmComponent::SocketName);
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
 
 	// Set camera properties
@@ -94,6 +94,27 @@ void APlayerCharacter::BeginPlay()
 		if (!LightDetectorInstance)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("LightDetector is missing from PlayerCharacter!"));
+		}
+	}
+
+	// Spawn default weapon if set
+	if (DefaultWeaponClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = GetInstigator();
+
+		DefaultWeapon = GetWorld()->SpawnActor<AWeapon>(DefaultWeaponClass, SpawnParams);
+
+		if (DefaultWeapon)
+		{
+			DefaultWeapon->AttachToComponent(
+				GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				TEXT("HolsterSocket")
+			);
+
+			UE_LOG(LogTemp, Log, TEXT("Default weapon spawned and holstered"));
 		}
 	}
 }
@@ -206,6 +227,29 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Interact
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::Interact);
+
+		// Weapon Actions
+		if (AttackAction)
+		{
+			EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &APlayerCharacter::OnAttackPressed);
+			EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnAttackReleased);
+		}
+
+		if (ChargeAttackAction)
+		{
+			EnhancedInputComponent->BindAction(ChargeAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::OnChargeAttackPressed);
+			EnhancedInputComponent->BindAction(ChargeAttackAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnChargeAttackReleased);
+		}
+
+		if (StealthTakedownAction)
+		{
+			EnhancedInputComponent->BindAction(StealthTakedownAction, ETriggerEvent::Started, this, &APlayerCharacter::OnStealthTakedownPressed);
+		}
+
+		if (EquipWeaponAction)
+		{
+			EnhancedInputComponent->BindAction(EquipWeaponAction, ETriggerEvent::Started, this, &APlayerCharacter::ToggleWeapon);
+		}
 	}
 }
 
@@ -219,7 +263,6 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	if (bIsClimbingLadder && CurrentLadder)
 	{
 		const FVector LadderUp = CurrentLadder->GetActorUpVector();
-		const FVector LadderRight = CurrentLadder->GetActorRightVector();
 
 		// if press Move forward key: look up move up, look down move down
 		// Flying mode Z move is smootly
@@ -289,16 +332,6 @@ void APlayerCharacter::Jump()
 		Super::Jump();
 }
 
-/*void APlayerCharacter::WhileJumping()
-{
-	if (!bCanMantle)
-	{
-		return;
-	}
-
-	PerformMantle();
-}*/
-
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
@@ -315,7 +348,6 @@ void APlayerCharacter::StartCrouch(const FInputActionValue& Value)
 	if (GetCharacterMovement()->IsCrouching())
 	{
 		UnCrouch();
-		// If mantling 
 
 	}
 	else
@@ -396,6 +428,8 @@ void APlayerCharacter::StopSprint()
 {
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
+
+// ----- Mantle System ----
 
 void APlayerCharacter::StartMantle(const FInputActionValue& Value)
 {
@@ -556,6 +590,8 @@ void APlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeigh
 	}
 }
 
+// ---- Ladder System ----
+
 void APlayerCharacter::SetLadderMode(bool bEnable, ALadder* Ladder)
 {
 	bIsClimbingLadder = bEnable;
@@ -570,7 +606,6 @@ void APlayerCharacter::SetLadderMode(bool bEnable, ALadder* Ladder)
 	if (bIsClimbingLadder)
 	{
 		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
-
 		GetCharacterMovement()->BrakingDecelerationFlying = 2000.0f;
 	}
 	else
@@ -663,9 +698,7 @@ void APlayerCharacter::PerformLadderTopClimb()
 	if (SavedLadder)
 	{
 		FVector LadderForward = SavedLadder->GetActorForwardVector();
-
 		FVector ClimbVelocity = FVector(0, 0, 650.0f) + (-LadderForward * 200.0f);
-
 		GetCharacterMovement()->Velocity = ClimbVelocity;
 	}
 
@@ -854,4 +887,96 @@ bool APlayerCharacter::CanMantle(FVector& OutMantleTargetLocation)
 	bCanMantle = true;
 
 	return true;
+}
+
+// --- Weapon System ---
+void APlayerCharacter::EquipWeapon(AWeapon* WeaponToEquip)
+{
+	if (!WeaponToEquip)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Attempted to equip a null weapon"));
+		return;
+	}
+
+	if (CurrentWeapon)
+	{
+		UnequipWeapon();
+	}
+
+	CurrentWeapon = WeaponToEquip;
+	CurrentWeapon->OnEquip(this);
+
+	UE_LOG(LogTemp, Log, TEXT("EQuipped weapon: %s"), *CurrentWeapon->GetName());
+}
+
+void APlayerCharacter::UnequipWeapon()
+{
+	if(!CurrentWeapon)
+	{
+		return;
+	}
+
+	CurrentWeapon->OnUnequip();
+	CurrentWeapon = nullptr;
+
+	UE_LOG(LogTemp, Log, TEXT("Weapon unequipped"));
+}
+
+void APlayerCharacter::ToggleWeapon()
+{
+	if (CurrentWeapon)
+	{
+		UnequipWeapon();
+
+		if (DefaultWeapon)
+		{
+			DefaultWeapon->AttachToComponent(
+				GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				TEXT("HolsterSocket")
+			);
+		}
+	}
+	else if (DefaultWeapon)
+	{
+		EquipWeapon(DefaultWeapon);
+	}
+}
+
+void APlayerCharacter::OnAttackPressed()
+{
+	if (bIsClimbingLadder || bIsMantling) return;
+	if (CurrentWeapon && CurrentWeapon->CanAttack())
+	{
+		CurrentWeapon->StartAttack();
+	}
+}
+
+void APlayerCharacter::OnAttackReleased()
+{
+	// Currently not needed, but useful for future combo systems
+}
+
+void APlayerCharacter::OnChargeAttackPressed()
+{
+	if (bIsClimbingLadder || bIsMantling)
+	{
+		return;
+	}
+}
+
+void APlayerCharacter::OnChargeAttackReleased()
+{
+	if (bIsClimbingLadder || bIsMantling)
+	{
+		return;
+	}
+}
+
+void APlayerCharacter::OnStealthTakedownPressed()
+{
+	if (bIsClimbingLadder || bIsMantling)
+	{
+		return;
+	}
 }

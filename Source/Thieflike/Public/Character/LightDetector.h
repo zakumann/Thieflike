@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <memory>
-
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -27,20 +25,20 @@ public:
 	float GetCurrentBrightness() const { return CachedBrightness; }
 
 protected:
-	// 내부 연산용 함수
+	// Internal calculation function
 	void CalculateBrightness();
 	void ProcessRenderTexture(UTextureRenderTarget2D* TargetTexture, float& OutLocalMax);
 
-	// 타이머 핸들
+	// Timer handle
 	FTimerHandle BrightnessTimerHandle;
 
-	// 계산 빈도 (초 단위, 0.1초 = 10fps)
+	// Calculation frequency (in seconds, 0.1s = 10fps)
 	const float CalculationInterval = 0.1f;
 
-	// 최종 계산된 밝기 값 캐싱
+	// Final calculated brightness value (cached)
 	float CachedBrightness = 0.0f;
 
-	// 픽셀 데이터 버퍼 (매번 생성하지 않도록 재사용)
+	// Pixel data buffer (reused to avoid repeated allocations)
 	TArray<FColor> PixelBuffer;
 
 public:

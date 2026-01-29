@@ -22,7 +22,7 @@ void ALightDetector::BeginPlay()
 		this,
 		&ALightDetector::CalculateBrightness,
 		CalculationInterval,
-		true // 반복 실행
+		true // Repeat
 	);
 }
 
@@ -58,13 +58,23 @@ void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* TargetTexture,
 	// ReadPixels is still a blocking call, but we minimize its impact by reusing the PixelBuffer
 	RenderTarget->ReadPixels(PixelBuffer);
 
+	// Periodic cleanup to prevent unbounded growth
+	if (PixelBuffer.Num() > 1024)
+	{
+		PixelBuffer.Empty();
+		RenderTarget->ReadPixels(PixelBuffer);
+	}
+
 	float LocalMax = 0.0f;
 
-	// Range-based for loop & Pointer to speed up
-	for (const FColor& Pixel : PixelBuffer)
+	// Sample every 4th pixel for performance (25% sampling)
+	// Change to "i++" for 100% sampling if needed
+	for (int32 i = 0; i < PixelBuffer.Num(); i += 4)
 	{
-		// FColor is 0~255, divide(/255.0f) if you want 0.0~1.0 range
-		// Luminant formula: Y = 0.299R + 0.587G + 0.114B
+		const FColor& Pixel = PixelBuffer[i];
+
+		// Luminance formula: Y = 0.299R + 0.587G + 0.114B
+		// Result is in 0-255 range
 		float PixelValue = (0.299f * Pixel.R) + (0.587f * Pixel.G) + (0.114f * Pixel.B);
 
 		if (PixelValue > LocalMax)
@@ -73,5 +83,5 @@ void ALightDetector::ProcessRenderTexture(UTextureRenderTarget2D* TargetTexture,
 		}
 	}
 
-	OutLocalMax = LocalMax; // 원본 값 유지 (0~255)
+	OutLocalMax = LocalMax; // Keep original value (0-255)
 }
