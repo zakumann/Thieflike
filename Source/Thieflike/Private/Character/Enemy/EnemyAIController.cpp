@@ -3,10 +3,8 @@
 
 #include "Character/Enemy/EnemyAIController.h"
 #include "Character/Enemy/EnemyCharacterBase.h"
-#include "GameFramework/Actor.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardComponent.h"
-#include "Navigation/PathFollowingComponent.h"
 
 AEnemyAIController::AEnemyAIController()
 {
@@ -15,77 +13,141 @@ AEnemyAIController::AEnemyAIController()
 	TeamId = FGenericTeamId(1);
 }
 
+void AEnemyAIController::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
+	// Cache reference to controlled enemy
 	ControlledEnemy = Cast<AEnemyCharacterBase>(InPawn);
 
 	if (!ControlledEnemy)
 	{
-		UE_LOG(LogTemp, Error, TEXT("EnemyAIController possessed non-enemy pawn!"));
+		UE_LOG(LogTemp, Error, TEXT("EnemyAIController: Tried to possess non-enemy pawn '%s'"),
+			InPawn ? *InPawn->GetName() : TEXT("NULL"));
 		return;
 	}
 
-	// Optional: If you add a BehaviorTree to your EnemyCharacterBase later, run it here.
-	// if (ControlledEnemy->BehaviorTreeAsset)
-	// {
-	//     RunBehaviorTree(ControlledEnemy->BehaviorTreeAsset);
-	// }
+	// Check if behavior tree is assigned
+	if (!ControlledEnemy->EnemyBehaviorTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnemyAIController: No Behavior Tree assigned to '%s'!"),
+			*ControlledEnemy->GetName());
+		UE_LOG(LogTemp, Error, TEXT("  -> Set 'Enemy Behavior Tree' in the Blueprint!"));
+		return;
+	}
+
+	// Start the Behavior Tree
+	// This automatically initializes the Blackboard if the BT has one assigned
+	bool bSuccess = RunBehaviorTree(ControlledEnemy->EnemyBehaviorTree);
+
+	if (bSuccess)
+	{
+		UE_LOG(LogTemp, Log, TEXT("EnemyAIController: Successfully started Behavior Tree for '%s'"),
+			*ControlledEnemy->GetName());
+
+		// Verify blackboard is initialized
+		if (GetBlackboardComponent())
+		{
+			UE_LOG(LogTemp, Log, TEXT("  -> Blackboard initialized successfully"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  -> Blackboard is NULL! Check BT has a Blackboard asset assigned."));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnemyAIController: Failed to start Behavior Tree for '%s'"),
+			*ControlledEnemy->GetName());
+	}
 }
 
 void AEnemyAIController::OnUnPossess()
 {
 	Super::OnUnPossess();
+
 	ControlledEnemy = nullptr;
 }
 
-void AEnemyAIController::MoveToTargetActor(AActor* TargetActor, float AcceptanceRadius)
+// ========== BLACKBOARD UPDATE FUNCTIONS ==========
+
+void AEnemyAIController::UpdateBlackboard_TargetActor(AActor* NewTarget)
 {
-	if (!TargetActor) return;
+	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
 
-	FAIMoveRequest MoveReq;
-	MoveReq.SetGoalActor(TargetActor);
-	MoveReq.SetAcceptanceRadius(AcceptanceRadius);
-	MoveReq.SetUsePathfinding(true);
-
-	// Critical for gameplay: If true, AI will move as close as possible if goal is unreachable.
-	// If false, AI aborts immediately if the goal is off-navmesh.
-	MoveReq.SetAllowPartialPath(true);
-
-	MoveTo(MoveReq);
+	if (BlackboardComp)
+	{
+		BlackboardComp->SetValueAsObject(BB_TargetActor, NewTarget);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateBlackboard_TargetActor: Blackboard is NULL!"));
+	}
 }
 
-void AEnemyAIController::MoveToTargetLocation(const FVector& Location, float AcceptanceRadius)
+void AEnemyAIController::UpdateBlackboard_LastKnownLocation(FVector Location)
 {
-	FAIMoveRequest MoveReq;
-	MoveReq.SetGoalLocation(Location);
-	MoveReq.SetAcceptanceRadius(AcceptanceRadius);
-	MoveReq.SetUsePathfinding(true);
-	MoveReq.SetAllowPartialPath(true);
+	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
 
-	MoveTo(MoveReq);
+	if (BlackboardComp)
+	{
+		BlackboardComp->SetValueAsVector(BB_LastKnownLocation, Location);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateBlackboard_LastKnownLocation: Blackboard is NULL!"));
+	}
 }
 
-void AEnemyAIController::StopMovementSafe()
+void AEnemyAIController::UpdateBlackboard_Distance(float Distance)
 {
-	StopMovement();
-	ClearFocusSafe();
+	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
+
+	if (BlackboardComp)
+	{
+		BlackboardComp->SetValueAsFloat(BB_DistanceToTarget, Distance);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateBlackboard_Distance: Blackboard is NULL!"));
+	}
 }
 
-void AEnemyAIController::SetFocusOnActor(AActor* FocusActor)
+void AEnemyAIController::UpdateBlackboard_CanSeePlayer(bool bCanSee)
 {
-	if (!FocusActor) return;
-	// Gameplay priority ensures this override lower priority look requests
-	SetFocus(FocusActor, EAIFocusPriority::Gameplay);
+	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
+
+	if (BlackboardComp)
+	{
+		BlackboardComp->SetValueAsBool(BB_CanSeePlayer, bCanSee);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateBlackboard_CanSeePlayer: Blackboard is NULL!"));
+	}
 }
 
-void AEnemyAIController::ClearFocusSafe()
+void AEnemyAIController::UpdateBlackboard_IsStunned(bool bStunned)
 {
-	ClearFocus(EAIFocusPriority::Gameplay);
+	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
+
+	if (BlackboardComp)
+	{
+		BlackboardComp->SetValueAsBool(BB_IsStunned, bStunned);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateBlackboard_IsStunned: Blackboard is NULL!"));
+	}
 }
 
-// Team Interface Logic
+// ========== TEAM INTERFACE ==========
+
 FGenericTeamId AEnemyAIController::GetGenericTeamId() const
 {
 	return TeamId;
@@ -93,25 +155,25 @@ FGenericTeamId AEnemyAIController::GetGenericTeamId() const
 
 ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Other) const
 {
-	// 1. Check if the other actor implements the interface
+	// Check if other actor implements team interface
 	const IGenericTeamAgentInterface* OtherTeamAgent = Cast<const IGenericTeamAgentInterface>(&Other);
 
 	if (OtherTeamAgent)
 	{
 		FGenericTeamId OtherTeamId = OtherTeamAgent->GetGenericTeamId();
 
-		// If Team IDs match, they are friendly.
+		// Same team = friendly
 		if (OtherTeamId == TeamId)
 		{
 			return ETeamAttitude::Friendly;
 		}
-		// If Other has No Team (ID 255), treat as Neutral
+		// No team = neutral
 		else if (OtherTeamId == FGenericTeamId::NoTeam)
 		{
 			return ETeamAttitude::Neutral;
 		}
 	}
 
-	// By default, treat everything not on my team as Hostile
+	// Everything else = hostile
 	return ETeamAttitude::Hostile;
 }

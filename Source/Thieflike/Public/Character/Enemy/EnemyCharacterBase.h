@@ -7,83 +7,89 @@
 #include "Perception/AIPerceptionTypes.h"
 #include "EnemyCharacterBase.generated.h"
 
-// Simple State Machine for the Enemy
-UENUM(BlueprintType)
-enum class EEnemyState : uint8
-{
-		Idle			UMETA(DisplayName = "Idle"),
-		Patrol			UMETA(DisplayName = "Patrol"),
-		Chase			UMETA(DisplayName = "Chase"),
-		Investigate		UMETA(DisplayName = "Investigate"),
-		Attack			UMETA(DisplayName = "Attack")
-};
-
+/**
+ * Base class for all enemy characters
+ * Handles AI perception, health, and behavior tree integration
+ */
 UCLASS()
 class THIEFLIKE_API AEnemyCharacterBase : public ACharacter
 {
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this character's properties
 	AEnemyCharacterBase();
 
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-public:	
-	// Called every frame
+public:
 	virtual void Tick(float DeltaTime) override;
 
-	// --- Enemy Components ---
+	// ========== AI COMPONENTS ==========
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
 	class UAIPerceptionComponent* AIPerceptionComp;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
 	class UAISenseConfig_Sight* SightConfig;
 
-	// --- AI Stats (Editable in BP for variations) ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
-	float BaseSightRadius = 1500.f;
+	// ========== BEHAVIOR TREE ==========
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
+	// Assign this in Blueprint! (e.g., BP_Enemy)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Behavior Tree")
+	class UBehaviorTree* EnemyBehaviorTree;
+
+	// ========== AI STATS ==========
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Vision")
+	float BaseSightRadius = 1500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Vision")
 	float LoseSightRadius = 2000.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Vision")
 	float PeripheralVisionAngle = 60.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
-	float ChaseSpeed = 600.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
-	float PatrolSpeed = 300.f;
-
-	// How close the player must be to be seen in Total Darkness
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Stats")
+	// How close player must be to see in total darkness
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Stealth")
 	float DarkVisionRange = 200.0f;
 
+	// ========== HEALTH SYSTEM ==========
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Health")
+	float MaxHealth = 100.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Health")
+	float CurrentHealth = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Health")
+	float StunDuration = 5.0f;
+
+	// Damage handling
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+		class AController* EventInstigator, AActor* DamageCauser) override;
+
+	// Apply stun (called by weapon system)
+	UFUNCTION(BlueprintCallable, Category = "AI|Health")
+	void ApplyStun(float Duration);
+
 protected:
-	// ---State Management ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI State")
-	EEnemyState CurrentState;
+	// ========== AI CONTROLLER REFERENCE ==========
 
-	UPROPERTY(BlueprintReadOnly, Category = "AI State")
-	class APlayerCharacter* TargetPlayer;
+	UPROPERTY()
+	class AEnemyAIController* AIController;
 
-	UPROPERTY(BlueprintReadOnly, Category = "AI State")
-	class AAIController* EnemyController;
+	// ========== PERCEPTION CALLBACKS ==========
 
-	// Functions ---
 	UFUNCTION()
 	void OnTargetDetected(AActor* Actor, FAIStimulus Stimulus);
 
-	// The logic to decide if we Actually see the player based on light level
-	bool CanSeePlayerDespiteStealth(APlayerCharacter* Player);
+	// Check if player is visible despite stealth
+	bool CanSeePlayerDespiteStealth(class APlayerCharacter* Player);
 
-	void SetEnemyState(EEnemyState NewState);
+	// ========== HEALTH/STUN SYSTEM ==========
 
-	// Virtual functions for child classes to override behaviors
-	virtual void HandlePatrol(float DeltaTime);
-	virtual void HandleChase(float DeltaTime);
-	virtual void HandleInvestigate(float DeltaTime);
+	FTimerHandle StunTimerHandle;
+	void OnStunEnd();
+	void Die();
 };

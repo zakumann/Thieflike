@@ -13,36 +13,51 @@
  * who is hostile and who is friendly.
  */
 UCLASS()
-class THIEFLIKE_API AEnemyAIController : public AAIController
+class THIEFLIKE_API AEnemyAIController : public AAIController, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 public:
 	AEnemyAIController();
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
 
 public:
-	// --- Movement Helpers ---
-	void MoveToTargetActor(AActor* TargetActor, float AcceptanceRadius = 100.0f);
-	void MoveToTargetLocation(const FVector& Location, float AcceptanceRadius = 50.f);
-	void StopMovementSafe();
+	// --- Blackboard Key Names (must match Blackboard asset exactly!) ---
+	static inline const FName BB_TargetActor = FName("TargetActor");
+	static inline const FName BB_LastKnownLocation = FName("LastKnownLocation");
+	static inline const FName BB_DistanceToTarget = FName("DistanceToTarget");
+	static inline const FName BB_IsStunned = FName("IsStunned");
+	static inline const FName BB_CanSeePlayer = FName("CanSeePlayer");
 
-	// --- Focus Helpers ---
-	void SetFocusOnActor(AActor* FocusActor);
-	void ClearFocusSafe();
+	// --- Blackboard Update Functions ---
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void UpdateBlackboard_TargetActor(AActor* NewTarget);
 
-	// --- IGenericTeamAgentInterface Implementation ---
-	// This allows the AI Perception system to ask "What team are you on?"
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void UpdateBlackboard_LastKnownLocation(FVector Location);
+
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void UpdateBlackboard_Distance(float Distance);
+
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void UpdateBlackboard_CanSeePlayer(bool bCanSee);
+
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void UpdateBlackboard_IsStunned(bool bStunned);
+
+	// --- Team Interface Implementation ---
 	virtual FGenericTeamId GetGenericTeamId() const override;
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 
 private:
-	// --- Team ID ---
+	// Team ID (1 = Enemy, 0 = Player)
 	FGenericTeamId TeamId;
 
 protected:
+	// Reference to controlled enemy
 	UPROPERTY(BlueprintReadOnly, Category = "AI")
 	class AEnemyCharacterBase* ControlledEnemy;
 };
